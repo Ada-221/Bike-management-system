@@ -1,0 +1,26 @@
+# Local course material (not licensed for repository distribution)
+/CEBP_Project2_Document.pdf
+
+# Local nested clone retained outside this repository's history
+/Bike-management-system/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# Build and test output
+build/
+dist/
+target/
+coverage/
+node_modules/
+__pycache__/
+*.pyc
