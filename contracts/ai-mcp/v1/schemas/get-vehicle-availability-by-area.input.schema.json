@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cebp.example/schemas/ai-mcp/v1/get-vehicle-availability-by-area.input.schema.json",
+  "title": "get_vehicle_availability_by_area input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "areaId", "pageSize", "maxReadModelAgeSeconds"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "areaId": { "type": "string", "pattern": "^area_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+    "minimumBatteryPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "pageSize": { "type": "integer", "minimum": 1, "maximum": 100 },
+    "cursor": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,256}$" },
+    "maxReadModelAgeSeconds": { "type": "integer", "minimum": 0, "maximum": 86400 }
+  }
+}

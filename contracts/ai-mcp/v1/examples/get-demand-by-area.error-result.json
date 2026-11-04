@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "readModelAsOf": "2026-11-04T07:50:00Z",
+  "error": {
+    "code": "STALE_READ_MODEL",
+    "message": "Read model age exceeds maxReadModelAgeSeconds.",
+    "retryable": true,
+    "details": { "ageSeconds": 612, "maxAgeSeconds": 300 }
+  }
+}

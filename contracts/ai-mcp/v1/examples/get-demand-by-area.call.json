@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0",
+  "areaIds": ["area_campus", "area_station"],
+  "from": "2026-11-04T06:00:00Z",
+  "to": "2026-11-04T08:00:00Z",
+  "bucketMinutes": 60,
+  "pageSize": 50,
+  "maxReadModelAgeSeconds": 300
+}

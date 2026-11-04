@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cebp.example/schemas/ai-mcp/v1/list-low-battery-vehicles.input.schema.json",
+  "title": "list_low_battery_vehicles input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "thresholdPercent", "pageSize", "maxReadModelAgeSeconds"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "thresholdPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "pageSize": { "type": "integer", "minimum": 1, "maximum": 100 },
+    "cursor": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,256}$" },
+    "maxReadModelAgeSeconds": { "type": "integer", "minimum": 0, "maximum": 86400 }
+  }
+}

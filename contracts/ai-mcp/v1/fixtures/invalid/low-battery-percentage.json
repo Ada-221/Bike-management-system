@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "1.0",
+  "thresholdPercent": 101,
+  "pageSize": 50,
+  "maxReadModelAgeSeconds": 300
+}

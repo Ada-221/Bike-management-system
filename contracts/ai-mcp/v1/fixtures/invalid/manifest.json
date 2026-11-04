@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0",
+  "fixtures": [
+    { "file": "low-battery-percentage.json", "schema": "../../schemas/list-low-battery-vehicles.input.schema.json", "reason": "thresholdPercent exceeds the inclusive 0-100 bound" },
+    { "file": "availability-coordinate.json", "schema": "../../schemas/get-vehicle-availability-by-area.output.schema.json", "reason": "WGS84 latitude exceeds 90 degrees" },
+    { "file": "demand-duplicate-area.json", "schema": "../../schemas/get-demand-by-area.input.schema.json", "reason": "areaIds must contain unique stable IDs" },
+    { "file": "proposal-bypasses-approval.json", "schema": "../../schemas/ai-proposal.schema.json", "reason": "effectPolicy and operationalStateChanged violate the mandatory human-approval boundary" }
+  ]
+}

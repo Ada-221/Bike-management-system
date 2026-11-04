@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0",
+  "request": {
+    "http": {
+      "method": "POST",
+      "path": "/mcp",
+      "headers": {
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
+        "MCP-Protocol-Version": "2026-07-28",
+        "Mcp-Method": "tools/call",
+        "Mcp-Name": "list_low_battery_vehicles"
+      }
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "id": "call-0001",
+      "method": "tools/call",
+      "params": {
+        "name": "list_low_battery_vehicles",
+        "arguments": { "schemaVersion": "1.0", "thresholdPercent": 25, "pageSize": 50, "maxReadModelAgeSeconds": 300 }
+      },
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/clientInfo": { "name": "ai-planner", "version": "1.0.0" }
+      }
+    }
+  },
+  "response": {
+    "jsonrpc": "2.0",
+    "id": "call-0001",
+    "result": {
+      "resultType": "complete",
+      "structuredContent": {
+        "schemaVersion": "1.0",
+        "readModelAsOf": "2026-11-04T08:00:00Z",
+        "freshness": { "status": "FRESH", "ageSeconds": 12, "maxAgeSeconds": 300 },
+        "vehicles": [{ "vehicleId": "veh_0007", "areaId": "area_campus", "batteryPercent": 9, "operationalStatus": "AVAILABLE", "telemetryAt": "2026-11-04T07:59:40Z" }],
+        "pagination": { "hasMore": false }
+      },
+      "content": [{ "type": "text", "text": "{\"schemaVersion\":\"1.0\",\"readModelAsOf\":\"2026-11-04T08:00:00Z\",\"freshness\":{\"status\":\"FRESH\",\"ageSeconds\":12,\"maxAgeSeconds\":300},\"vehicles\":[{\"vehicleId\":\"veh_0007\",\"areaId\":\"area_campus\",\"batteryPercent\":9,\"operationalStatus\":\"AVAILABLE\",\"telemetryAt\":\"2026-11-04T07:59:40Z\"}],\"pagination\":{\"hasMore\":false}}" }],
+      "isError": false,
+      "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "cebp-mcp-server", "version": "1.0.0" } }
+    }
+  }
+}

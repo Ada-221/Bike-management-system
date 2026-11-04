@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "proposalId": "proposal_unsafe_0001",
+  "runId": "run_unsafe_0001",
+  "createdAt": "2026-11-04T08:01:00Z",
+  "status": "PENDING_APPROVAL",
+  "effectPolicy": "AUTO_EXECUTE",
+  "operationalStateChanged": true,
+  "snapshot": {
+    "snapshotId": "snapshot_unsafe_0001",
+    "readModelAsOf": "2026-11-04T08:00:00Z",
+    "sources": [{ "toolName": "list_low_battery_vehicles", "readModelAsOf": "2026-11-04T08:00:00Z", "resultSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }]
+  },
+  "planner": { "plannerVersion": "1.0.0", "mode": "DETERMINISTIC_MOCK", "modelProvider": "internal", "modelId": "fixture-planner-v1", "temperature": 0, "seed": 42 },
+  "actions": [{
+    "actionId": "action_charge_0007", "type": "CHARGE", "priority": "CRITICAL", "vehicleId": "veh_0007", "currentAreaId": "area_campus", "targetBatteryPercent": 80,
+    "rationale": "Battery is low.", "sourceEvidence": [{ "toolName": "list_low_battery_vehicles", "readModelAsOf": "2026-11-04T08:00:00Z", "vehicleIds": ["veh_0007"] }], "warnings": []
+  }],
+  "audit": {
+    "correlationId": "corr_unsafe_0001", "createdBy": "ai-planner", "promptTemplateVersion": "1.0", "outputSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "validation": { "schema": "PASSED", "knownIdGrounding": "PASSED", "hardRules": "PASSED", "approvalSafety": "PASSED" }
+  },
+  "approval": { "required": true }
+}
