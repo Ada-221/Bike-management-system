@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rider</string>
+    <string name="navigate_back">Back</string>
+
+    <string name="vehicle_list_title">Available vehicles</string>
+    <string name="vehicle_list_empty">No vehicles available right now.</string>
+    <string name="vehicle_details_title">Vehicle details</string>
+    <string name="vehicle_not_found">This vehicle could not be found.</string>
+    <string name="vehicle_battery">Battery: %1$d%%</string>
+    <string name="vehicle_area">Area: %1$s</string>
+    <string name="vehicle_status">Status: %1$s</string>
+
+    <string name="vehicle_type_e_bike">E-bike</string>
+    <string name="vehicle_type_scooter">Scooter</string>
+    <string name="vehicle_status_available">Available</string>
+    <string name="vehicle_status_rented">Rented</string>
+    <string name="vehicle_status_maintenance">In maintenance</string>
+
+    <string name="rental_in_progress">Ride in progress on %1$s</string>
+    <string name="rental_resume">Resume ride</string>
+    <string name="rental_start">Start rental</string>
+    <string name="rental_active_title">Active ride</string>
+    <string name="rental_vehicle">Vehicle: %1$s</string>
+    <string name="rental_started_at">Started at %1$s</string>
+    <string name="rental_ended_at">Ended at %1$s</string>
+    <string name="rental_duration_minutes">Duration: %1$d min</string>
+    <string name="rental_end">Return vehicle</string>
+    <string name="rental_summary_title">Ride summary</string>
+    <string name="rental_not_found">This ride could not be found.</string>
+    <string name="rental_done">Done</string>
+</resources>
