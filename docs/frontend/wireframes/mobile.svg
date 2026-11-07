@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1090" viewBox="0 0 390 1090" role="img" aria-labelledby="title description">
+  <title id="title">Operator dashboard mobile wireframe</title>
+  <desc id="description">Horizontal navigation above a two-column metric grid; stacked map, disabled proposal review and horizontally scrollable vehicle table. Static Week 1 layout.</desc>
+  <style>text{font-family:Arial,sans-serif;fill:#24392e;font-size:14px}.small{font-size:11px;fill:#596b5b}.heading{font-size:22px;font-weight:bold}.label{font-weight:bold}.box{fill:#fff;stroke:#b2bead}.muted{fill:#edf1e7;stroke:#b2bead}</style>
+  <rect width="390" height="1090" fill="#f5f7f1"/>
+  <rect width="390" height="110" fill="#244638"/>
+  <text x="20" y="35" style="fill:#fff;font-size:18px">CEBP / Fleet operations</text>
+  <rect x="16" y="60" width="112" height="34" rx="4" fill="#d5e5ad"/><text x="38" y="82">Overview</text>
+  <text x="177" y="82" style="fill:#fff">Fleet</text><text x="284" y="82" style="fill:#fff">Proposals</text>
+  <text x="16" y="140" class="small">Operations / Overview</text><text x="275" y="140" class="small">Synthetic data</text>
+  <text x="16" y="190" class="heading">Keep the fleet moving.</text>
+  <text x="16" y="216" class="small">Vehicles, service areas, and attention needed.</text>
+  <rect x="16" y="240" width="358" height="62" class="muted"/>
+  <text x="29" y="265" class="label">Week 1 interface skeleton</text><text x="29" y="287" class="small">Fixed sample data / no backend connection</text>
+  <rect x="16" y="322" width="171" height="95" class="box"/><text x="30" y="349">Total vehicles</text><text x="30" y="392" class="heading">04</text>
+  <rect x="203" y="322" width="171" height="95" class="box"/><text x="217" y="349">Available</text><text x="217" y="392" class="heading">02</text>
+  <rect x="16" y="433" width="171" height="95" class="box"/><text x="30" y="460">On a ride</text><text x="30" y="503" class="heading">01</text>
+  <rect x="203" y="433" width="171" height="95" class="box"/><text x="217" y="460">Needs attention</text><text x="217" y="503" class="heading">01</text>
+  <rect x="16" y="548" width="358" height="170" class="muted"/><text x="30" y="578" class="label">Area overview</text>
+  <rect x="65" y="605" width="260" height="80" class="box"/><text x="91" y="635">Map layout placeholder</text><text x="91" y="662" class="small">No live map or geographic tiles</text>
+  <rect x="16" y="738" width="358" height="170" class="box"/><text x="30" y="769" class="label">Proposal review / layout preview</text><text x="30" y="800" class="small">Rationale, source evidence, warnings</text>
+  <rect x="30" y="821" width="152" height="34" class="muted"/><text x="40" y="843" class="small">Approve · disabled</text>
+  <rect x="202" y="821" width="152" height="34" class="muted"/><text x="217" y="843" class="small">Reject · disabled</text><text x="30" y="885" class="small">Human review required / no operational actions</text>
+  <rect x="16" y="928" width="358" height="112" class="box"/><text x="30" y="957" class="label">Vehicle snapshot</text>
+  <text x="30" y="986" class="small">Vehicle / type       Area       Battery       Status →</text><text x="30" y="1018" class="small">Scroll inside table; keep page within viewport</text>
+  <text x="16" y="1070" class="small">Keyboard focus and text labels in every section.</text>
+</svg>
