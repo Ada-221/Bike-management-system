@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="830" viewBox="0 0 1200 830" role="img" aria-labelledby="title description">
+  <title id="title">Operator dashboard desktop wireframe</title>
+  <desc id="description">Sidebar navigation and sample-data banner, four metrics, a map placeholder and disabled proposal review, then a vehicle table. Static Week 1 layout.</desc>
+  <style>text{font-family:Arial,sans-serif;fill:#24392e;font-size:15px}.small{font-size:12px;fill:#596b5b}.heading{font-size:24px;font-weight:bold}.label{font-weight:bold}.box{fill:#fff;stroke:#b2bead}.muted{fill:#edf1e7;stroke:#b2bead}.nav{fill:#edf1e7;font-size:16px}.line{stroke:#b2bead}</style>
+  <rect width="1200" height="830" fill="#f5f7f1"/>
+  <rect width="210" height="830" fill="#244638"/>
+  <text x="28" y="50" class="nav">CEBP / Fleet operations</text>
+  <rect x="18" y="106" width="174" height="44" rx="5" fill="#d5e5ad"/>
+  <text x="35" y="134">Overview · selected</text>
+  <text x="35" y="189" class="nav">Fleet</text><text x="35" y="244" class="nav">Proposals</text>
+  <text x="28" y="785" class="nav">Person 3 / Week 1</text>
+  <rect x="210" width="990" height="70" class="box"/>
+  <text x="245" y="43">Operations / Overview</text><text x="1020" y="43">Synthetic data</text>
+  <text x="245" y="120" class="heading">Keep the fleet moving.</text>
+  <text x="245" y="150" class="small">Fixed sample data. No backend or live connection.</text>
+  <rect x="245" y="177" width="920" height="43" class="muted"/>
+  <text x="260" y="204">Interface skeleton / Week 1 preview</text>
+  <g><rect x="245" y="245" width="215" height="100" class="box"/><text x="263" y="274">Total vehicles</text><text x="263" y="319" class="heading">04</text>
+  <rect x="480" y="245" width="215" height="100" class="box"/><text x="498" y="274">Available</text><text x="498" y="319" class="heading">02</text>
+  <rect x="715" y="245" width="215" height="100" class="box"/><text x="733" y="274">On a ride</text><text x="733" y="319" class="heading">01</text>
+  <rect x="950" y="245" width="215" height="100" class="box"/><text x="968" y="274">Needs attention</text><text x="968" y="319" class="heading">01</text></g>
+  <rect x="245" y="370" width="550" height="243" class="muted"/>
+  <text x="265" y="402" class="label">Area overview / Map placeholder</text>
+  <path d="M260 588L770 430M330 420L720 590M490 415L520 598" class="line" fill="none"/>
+  <rect x="360" y="460" width="310" height="85" class="box"/><text x="380" y="492">Illustrative service-area layout</text><text x="380" y="520" class="small">Provider + real telemetry in later weeks</text>
+  <rect x="815" y="370" width="350" height="243" class="box"/>
+  <text x="835" y="402" class="label">Proposal review / layout preview</text><text x="835" y="437">Rationale, evidence, warnings</text>
+  <rect x="835" y="469" width="138" height="40" class="muted"/><text x="848" y="495" class="small">Approve · disabled</text>
+  <rect x="991" y="469" width="150" height="40" class="muted"/><text x="1005" y="495" class="small">Reject · disabled</text>
+  <text x="835" y="548" class="small">No decision or fleet action in Week 1.</text><text x="835" y="574" class="small">Contract agreement before integration.</text>
+  <rect x="245" y="640" width="920" height="150" class="box"/>
+  <text x="265" y="670" class="label">Vehicle snapshot / synthetic data</text><path d="M245 684H1165M245 728H1165" class="line"/>
+  <text x="265" y="711">Vehicle / type</text><text x="520" y="711">Area</text><text x="760" y="711">Battery</text><text x="970" y="711">Status</text>
+  <text x="265" y="761">EB-001 / E-bike</text><text x="520" y="761">Campus</text><text x="760" y="761">92%</text><text x="970" y="761">Available</text>
+  <text x="245" y="815" class="small">Fleet: snapshot + planned filters/details. Proposals: evidence + disabled decisions + planned audit flow.</text>
+</svg>
