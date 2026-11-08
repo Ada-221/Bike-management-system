@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0",
+  "readModelAsOf": "2026-11-04T08:00:00Z",
+  "freshness": { "status": "FRESH", "ageSeconds": 12, "maxAgeSeconds": 300 },
+  "from": "2026-11-04T06:00:00Z",
+  "to": "2026-11-04T08:00:00Z",
+  "bucketMinutes": 60,
+  "areas": [
+    {
+      "areaId": "area_campus",
+      "totalRequestedTrips": 19,
+      "buckets": [
+        { "start": "2026-11-04T06:00:00Z", "end": "2026-11-04T07:00:00Z", "requestedTrips": 7, "completedTrips": 7, "unservedTrips": 0 },
+        { "start": "2026-11-04T07:00:00Z", "end": "2026-11-04T08:00:00Z", "requestedTrips": 12, "completedTrips": 8, "unservedTrips": 4 }
+      ]
+    },
+    {
+      "areaId": "area_station",
+      "totalRequestedTrips": 5,
+      "buckets": [
+        { "start": "2026-11-04T06:00:00Z", "end": "2026-11-04T07:00:00Z", "requestedTrips": 3, "completedTrips": 3, "unservedTrips": 0 },
+        { "start": "2026-11-04T07:00:00Z", "end": "2026-11-04T08:00:00Z", "requestedTrips": 2, "completedTrips": 2, "unservedTrips": 0 }
+      ]
+    }
+  ],
+  "pagination": { "hasMore": false }
+}

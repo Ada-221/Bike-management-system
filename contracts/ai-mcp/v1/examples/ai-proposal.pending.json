@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0",
+  "proposalId": "proposal_demo_0001",
+  "runId": "run_demo_0001",
+  "createdAt": "2026-11-04T08:01:00Z",
+  "status": "PENDING_APPROVAL",
+  "effectPolicy": "HUMAN_APPROVAL_REQUIRED",
+  "operationalStateChanged": false,
+  "snapshot": {
+    "snapshotId": "snapshot_demo_0001",
+    "readModelAsOf": "2026-11-04T08:00:00Z",
+    "sources": [
+      { "toolName": "list_low_battery_vehicles", "readModelAsOf": "2026-11-04T08:00:00Z", "resultSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      { "toolName": "get_vehicle_availability_by_area", "readModelAsOf": "2026-11-04T08:00:00Z", "resultSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+      { "toolName": "get_demand_by_area", "readModelAsOf": "2026-11-04T08:00:00Z", "resultSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }
+    ]
+  },
+  "planner": { "plannerVersion": "1.0.0", "mode": "DETERMINISTIC_MOCK", "modelProvider": "internal", "modelId": "fixture-planner-v1", "temperature": 0, "seed": 42 },
+  "actions": [
+    {
+      "actionId": "action_charge_0007",
+      "type": "CHARGE",
+      "priority": "CRITICAL",
+      "vehicleId": "veh_0007",
+      "currentAreaId": "area_campus",
+      "targetBatteryPercent": 80,
+      "rationale": "Battery is below the charging threshold.",
+      "sourceEvidence": [
+        { "toolName": "list_low_battery_vehicles", "readModelAsOf": "2026-11-04T08:00:00Z", "vehicleIds": ["veh_0007"], "areaIds": ["area_campus"], "observation": "Battery reported at 9 percent." }
+      ],
+      "warnings": ["Confirm charging capacity before dispatch."]
+    },
+    {
+      "actionId": "action_move_0015",
+      "type": "REDISTRIBUTE",
+      "priority": "HIGH",
+      "vehicleIds": ["veh_0015"],
+      "sourceAreaId": "area_campus",
+      "targetAreaId": "area_station",
+      "rationale": "Move one available vehicle toward the observed demand deficit.",
+      "sourceEvidence": [
+        { "toolName": "get_vehicle_availability_by_area", "readModelAsOf": "2026-11-04T08:00:00Z", "vehicleIds": ["veh_0015"], "areaIds": ["area_campus"], "observation": "Vehicle is available with sufficient battery." },
+        { "toolName": "get_demand_by_area", "readModelAsOf": "2026-11-04T08:00:00Z", "areaIds": ["area_station"], "observation": "Target area has a forecast deficit." }
+      ],
+      "warnings": []
+    }
+  ],
+  "audit": {
+    "correlationId": "corr_demo_0001",
+    "createdBy": "ai-planner",
+    "promptTemplateVersion": "1.0",
+    "outputSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "validation": { "schema": "PASSED", "knownIdGrounding": "PASSED", "hardRules": "PASSED", "approvalSafety": "PASSED" }
+  },
+  "approval": { "required": true }
+}

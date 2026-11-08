@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cebp.example/schemas/ai-mcp/v1/get-demand-by-area.output.schema.json",
+  "title": "get_demand_by_area output",
+  "oneOf": [{ "$ref": "#/$defs/success" }, { "$ref": "#/$defs/failure" }],
+  "$defs": {
+    "utcTimestamp": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "areaId": { "type": "string", "pattern": "^area_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+    "freshness": {
+      "type": "object", "additionalProperties": false, "required": ["status", "ageSeconds", "maxAgeSeconds"],
+      "properties": { "status": { "enum": ["FRESH", "STALE"] }, "ageSeconds": { "type": "integer", "minimum": 0 }, "maxAgeSeconds": { "type": "integer", "minimum": 0, "maximum": 86400 } }
+    },
+    "pagination": {
+      "type": "object", "additionalProperties": false, "required": ["hasMore"],
+      "properties": { "hasMore": { "type": "boolean" }, "nextCursor": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,256}$" } },
+      "allOf": [
+        { "if": { "type": "object", "properties": { "hasMore": { "const": true } }, "required": ["hasMore"] }, "then": { "type": "object", "properties": { "nextCursor": {} }, "required": ["nextCursor"] } },
+        { "if": { "type": "object", "properties": { "hasMore": { "const": false } }, "required": ["hasMore"] }, "then": { "type": "object", "not": { "properties": { "nextCursor": {} }, "required": ["nextCursor"] } } }
+      ]
+    },
+    "error": {
+      "type": "object", "additionalProperties": false, "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "enum": ["INVALID_ARGUMENT", "UNKNOWN_AREA", "STALE_READ_MODEL", "CURSOR_EXPIRED", "READ_MODEL_UNAVAILABLE", "INTERNAL_ERROR"] },
+        "message": { "type": "string", "minLength": 1, "maxLength": 500 }, "retryable": { "type": "boolean" },
+        "details": { "type": "object", "additionalProperties": { "type": ["string", "number", "integer", "boolean", "null"] } }
+      }
+    },
+    "bucket": {
+      "type": "object", "additionalProperties": false, "required": ["start", "end", "requestedTrips", "completedTrips", "unservedTrips"],
+      "properties": {
+        "start": { "$ref": "#/$defs/utcTimestamp" }, "end": { "$ref": "#/$defs/utcTimestamp" },
+        "requestedTrips": { "type": "integer", "minimum": 0 }, "completedTrips": { "type": "integer", "minimum": 0 }, "unservedTrips": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "areaDemand": {
+      "type": "object", "additionalProperties": false, "required": ["areaId", "totalRequestedTrips", "buckets"],
+      "properties": {
+        "areaId": { "$ref": "#/$defs/areaId" }, "totalRequestedTrips": { "type": "integer", "minimum": 0 },
+        "buckets": { "type": "array", "maxItems": 672, "description": "Deterministically ordered by start ascending.", "items": { "$ref": "#/$defs/bucket" } }
+      }
+    },
+    "success": {
+      "type": "object", "additionalProperties": false, "required": ["schemaVersion", "readModelAsOf", "freshness", "from", "to", "bucketMinutes", "areas"],
+      "properties": {
+        "schemaVersion": { "const": "1.0" }, "readModelAsOf": { "$ref": "#/$defs/utcTimestamp" }, "freshness": { "$ref": "#/$defs/freshness" },
+        "from": { "$ref": "#/$defs/utcTimestamp" }, "to": { "$ref": "#/$defs/utcTimestamp" }, "bucketMinutes": { "enum": [15, 30, 60, 1440] },
+        "areas": { "type": "array", "maxItems": 100, "description": "Deterministically ordered by areaId ascending.", "items": { "$ref": "#/$defs/areaDemand" } },
+        "pagination": { "$ref": "#/$defs/pagination" }
+      }
+    },
+    "failure": {
+      "type": "object", "additionalProperties": false, "required": ["schemaVersion", "readModelAsOf", "error"],
+      "properties": { "schemaVersion": { "const": "1.0" }, "readModelAsOf": { "oneOf": [{ "$ref": "#/$defs/utcTimestamp" }, { "type": "null" }] }, "error": { "$ref": "#/$defs/error" } }
+    }
+  }
+}

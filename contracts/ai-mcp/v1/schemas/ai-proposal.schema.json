@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cebp.example/schemas/ai-mcp/v1/ai-proposal.schema.json",
+  "title": "Human-reviewed fleet action proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "proposalId", "runId", "createdAt", "status", "effectPolicy", "operationalStateChanged", "snapshot", "planner", "actions", "audit", "approval"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "proposalId": { "$ref": "#/$defs/proposalId" },
+    "runId": { "type": "string", "pattern": "^run_[A-Za-z0-9][A-Za-z0-9_-]{7,63}$" },
+    "createdAt": { "$ref": "#/$defs/utcTimestamp" },
+    "status": { "enum": ["PENDING_APPROVAL", "APPROVED", "REJECTED"] },
+    "effectPolicy": { "const": "HUMAN_APPROVAL_REQUIRED" },
+    "operationalStateChanged": {
+      "const": false,
+      "description": "A proposal record is advisory and never directly mutates fleet state, including after approval."
+    },
+    "snapshot": { "$ref": "#/$defs/snapshot" },
+    "planner": { "$ref": "#/$defs/planner" },
+    "actions": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "oneOf": [{ "$ref": "#/$defs/chargingAction" }, { "$ref": "#/$defs/redistributionAction" }] } },
+    "audit": { "$ref": "#/$defs/audit" },
+    "approval": { "$ref": "#/$defs/approval" }
+  },
+  "allOf": [
+    {
+      "if": { "type": "object", "properties": { "status": { "const": "PENDING_APPROVAL" } }, "required": ["status"] },
+      "then": { "type": "object", "properties": { "approval": { "type": "object", "properties": { "required": { "const": true } }, "not": { "properties": { "decision": {} }, "required": ["decision"] } } } }
+    },
+    {
+      "if": { "type": "object", "properties": { "status": { "const": "APPROVED" } }, "required": ["status"] },
+      "then": { "type": "object", "properties": { "approval": { "type": "object", "required": ["decision"], "properties": { "required": { "const": true }, "decision": { "type": "object", "properties": { "outcome": { "const": "APPROVED" } } } } } } }
+    },
+    {
+      "if": { "type": "object", "properties": { "status": { "const": "REJECTED" } }, "required": ["status"] },
+      "then": { "type": "object", "properties": { "approval": { "type": "object", "required": ["decision"], "properties": { "required": { "const": true }, "decision": { "type": "object", "properties": { "outcome": { "const": "REJECTED" } } } } } } }
+    }
+  ],
+  "$defs": {
+    "utcTimestamp": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "proposalId": { "type": "string", "pattern": "^proposal_[A-Za-z0-9][A-Za-z0-9_-]{7,63}$" },
+    "vehicleId": { "type": "string", "pattern": "^veh_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+    "areaId": { "type": "string", "pattern": "^area_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["toolName", "readModelAsOf", "resultSha256"],
+      "properties": {
+        "toolName": { "enum": ["list_low_battery_vehicles", "get_vehicle_availability_by_area", "get_demand_by_area"] },
+        "readModelAsOf": { "$ref": "#/$defs/utcTimestamp" },
+        "resultSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "snapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["snapshotId", "readModelAsOf", "sources"],
+      "properties": {
+        "snapshotId": { "type": "string", "pattern": "^snapshot_[A-Za-z0-9][A-Za-z0-9_-]{7,63}$" },
+        "readModelAsOf": { "$ref": "#/$defs/utcTimestamp" },
+        "sources": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "$ref": "#/$defs/source" } }
+      }
+    },
+    "planner": {
+      "type": "object", "additionalProperties": false,
+      "required": ["plannerVersion", "mode", "modelProvider", "modelId", "temperature"],
+      "properties": {
+        "plannerVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "mode": { "enum": ["DETERMINISTIC_MOCK", "LLM"] },
+        "modelProvider": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "modelId": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+        "seed": { "type": "integer", "minimum": 0 }
+      },
+      "allOf": [{ "if": { "type": "object", "properties": { "mode": { "const": "DETERMINISTIC_MOCK" } }, "required": ["mode"] }, "then": { "type": "object", "required": ["seed"], "properties": { "temperature": { "const": 0 }, "seed": {} } } }]
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["toolName", "readModelAsOf"],
+      "properties": {
+        "toolName": { "enum": ["list_low_battery_vehicles", "get_vehicle_availability_by_area", "get_demand_by_area"] },
+        "readModelAsOf": { "$ref": "#/$defs/utcTimestamp" },
+        "vehicleIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/vehicleId" } },
+        "areaIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/areaId" } },
+        "observation": { "type": "string", "minLength": 1, "maxLength": 500 }
+      },
+      "anyOf": [
+        { "properties": { "vehicleIds": {} }, "required": ["vehicleIds"] },
+        { "properties": { "areaIds": {} }, "required": ["areaIds"] }
+      ]
+    },
+    "chargingAction": {
+      "type": "object", "additionalProperties": false,
+      "required": ["actionId", "type", "priority", "vehicleId", "currentAreaId", "targetBatteryPercent", "rationale", "sourceEvidence", "warnings"],
+      "properties": {
+        "actionId": { "type": "string", "pattern": "^action_[A-Za-z0-9][A-Za-z0-9_-]{5,63}$" },
+        "type": { "const": "CHARGE" }, "priority": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "vehicleId": { "$ref": "#/$defs/vehicleId" }, "currentAreaId": { "$ref": "#/$defs/areaId" },
+        "targetBatteryPercent": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "sourceEvidence": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/evidence" } },
+        "warnings": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 300 } }
+      }
+    },
+    "redistributionAction": {
+      "type": "object", "additionalProperties": false,
+      "description": "sourceAreaId and targetAreaId must differ; this cross-field rule is enforced by planner validation.",
+      "required": ["actionId", "type", "priority", "vehicleIds", "sourceAreaId", "targetAreaId", "rationale", "sourceEvidence", "warnings"],
+      "properties": {
+        "actionId": { "type": "string", "pattern": "^action_[A-Za-z0-9][A-Za-z0-9_-]{5,63}$" },
+        "type": { "const": "REDISTRIBUTE" }, "priority": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "vehicleIds": { "type": "array", "minItems": 1, "maxItems": 25, "uniqueItems": true, "items": { "$ref": "#/$defs/vehicleId" } },
+        "sourceAreaId": { "$ref": "#/$defs/areaId" }, "targetAreaId": { "$ref": "#/$defs/areaId" },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "sourceEvidence": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/evidence" } },
+        "warnings": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 300 } }
+      }
+    },
+    "audit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["correlationId", "createdBy", "promptTemplateVersion", "outputSha256", "validation"],
+      "properties": {
+        "correlationId": { "type": "string", "pattern": "^corr_[A-Za-z0-9][A-Za-z0-9_-]{7,63}$" },
+        "createdBy": { "const": "ai-planner" }, "promptTemplateVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+        "outputSha256": { "$ref": "#/$defs/sha256" },
+        "validation": {
+          "type": "object", "additionalProperties": false,
+          "required": ["schema", "knownIdGrounding", "hardRules", "approvalSafety"],
+          "properties": {
+            "schema": { "const": "PASSED" }, "knownIdGrounding": { "const": "PASSED" }, "hardRules": { "const": "PASSED" }, "approvalSafety": { "const": "PASSED" }
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["outcome", "operatorId", "decidedAt"],
+      "properties": {
+        "outcome": { "enum": ["APPROVED", "REJECTED"] },
+        "operatorId": { "type": "string", "pattern": "^operator_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+        "decidedAt": { "$ref": "#/$defs/utcTimestamp" }, "comment": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "approval": {
+      "type": "object", "additionalProperties": false, "required": ["required"],
+      "properties": { "required": { "const": true }, "decision": { "$ref": "#/$defs/decision" } }
+    }
+  }
+}

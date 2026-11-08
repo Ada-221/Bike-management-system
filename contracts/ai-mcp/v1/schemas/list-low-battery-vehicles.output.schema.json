@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cebp.example/schemas/ai-mcp/v1/list-low-battery-vehicles.output.schema.json",
+  "title": "list_low_battery_vehicles output",
+  "oneOf": [
+    { "$ref": "#/$defs/success" },
+    { "$ref": "#/$defs/failure" }
+  ],
+  "$defs": {
+    "utcTimestamp": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "vehicleId": { "type": "string", "pattern": "^veh_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+    "areaId": { "type": "string", "pattern": "^area_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+    "freshness": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "ageSeconds", "maxAgeSeconds"],
+      "properties": {
+        "status": { "enum": ["FRESH", "STALE"] },
+        "ageSeconds": { "type": "integer", "minimum": 0 },
+        "maxAgeSeconds": { "type": "integer", "minimum": 0, "maximum": 86400 }
+      }
+    },
+    "pagination": {
+      "type": "object", "additionalProperties": false,
+      "required": ["hasMore"],
+      "properties": {
+        "hasMore": { "type": "boolean" },
+        "nextCursor": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,256}$" }
+      },
+      "allOf": [
+        { "if": { "type": "object", "properties": { "hasMore": { "const": true } }, "required": ["hasMore"] }, "then": { "type": "object", "properties": { "nextCursor": {} }, "required": ["nextCursor"] } },
+        { "if": { "type": "object", "properties": { "hasMore": { "const": false } }, "required": ["hasMore"] }, "then": { "type": "object", "not": { "properties": { "nextCursor": {} }, "required": ["nextCursor"] } } }
+      ]
+    },
+    "error": {
+      "type": "object", "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "enum": ["INVALID_ARGUMENT", "STALE_READ_MODEL", "CURSOR_EXPIRED", "READ_MODEL_UNAVAILABLE", "INTERNAL_ERROR"] },
+        "message": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "retryable": { "type": "boolean" },
+        "details": { "type": "object", "additionalProperties": { "type": ["string", "number", "integer", "boolean", "null"] } }
+      }
+    },
+    "vehicle": {
+      "type": "object", "additionalProperties": false,
+      "required": ["vehicleId", "areaId", "batteryPercent", "operationalStatus", "telemetryAt"],
+      "properties": {
+        "vehicleId": { "$ref": "#/$defs/vehicleId" },
+        "areaId": { "$ref": "#/$defs/areaId" },
+        "batteryPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "operationalStatus": { "enum": ["AVAILABLE", "IN_USE", "MAINTENANCE", "OFFLINE"] },
+        "telemetryAt": { "$ref": "#/$defs/utcTimestamp" }
+      }
+    },
+    "success": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schemaVersion", "readModelAsOf", "freshness", "vehicles"],
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "readModelAsOf": { "$ref": "#/$defs/utcTimestamp" },
+        "freshness": { "$ref": "#/$defs/freshness" },
+        "vehicles": {
+          "type": "array", "maxItems": 100, "uniqueItems": true,
+          "description": "Deterministically ordered by batteryPercent ascending, then vehicleId ascending.",
+          "items": { "$ref": "#/$defs/vehicle" }
+        },
+        "pagination": { "$ref": "#/$defs/pagination" }
+      }
+    },
+    "failure": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schemaVersion", "readModelAsOf", "error"],
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "readModelAsOf": { "oneOf": [{ "$ref": "#/$defs/utcTimestamp" }, { "type": "null" }] },
+        "error": { "$ref": "#/$defs/error" }
+      }
+    }
+  }
+}

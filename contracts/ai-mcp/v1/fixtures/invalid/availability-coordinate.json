@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "readModelAsOf": "2026-11-04T08:00:00Z",
+  "freshness": { "status": "FRESH", "ageSeconds": 12, "maxAgeSeconds": 300 },
+  "areaId": "area_campus",
+  "availableCount": 1,
+  "vehicles": [
+    { "vehicleId": "veh_0015", "batteryPercent": 74, "location": { "latitude": 145.7, "longitude": 21.2 }, "availableSince": "2026-11-04T07:10:00Z" }
+  ]
+}

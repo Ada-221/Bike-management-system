@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "protocolVersion": "2026-07-28",
+  "transport": {
+    "type": "streamable-http",
+    "endpoint": "/mcp",
+    "stateless": true,
+    "structuredContentMirroredAsText": true
+  },
+  "tools": [
+    {
+      "name": "list_low_battery_vehicles",
+      "description": "Lists fleet vehicles at or below a battery threshold from the MCP read model.",
+      "inputSchema": "schemas/list-low-battery-vehicles.input.schema.json",
+      "outputSchema": "schemas/list-low-battery-vehicles.output.schema.json",
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
+    },
+    {
+      "name": "get_vehicle_availability_by_area",
+      "description": "Lists available vehicles in a stable fleet area.",
+      "inputSchema": "schemas/get-vehicle-availability-by-area.input.schema.json",
+      "outputSchema": "schemas/get-vehicle-availability-by-area.output.schema.json",
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
+    },
+    {
+      "name": "get_demand_by_area",
+      "description": "Returns time-bucketed demand observations for one or more stable fleet areas.",
+      "inputSchema": "schemas/get-demand-by-area.input.schema.json",
+      "outputSchema": "schemas/get-demand-by-area.output.schema.json",
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
+    }
+  ]
+}
