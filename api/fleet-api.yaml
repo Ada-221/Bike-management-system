@@ -1,0 +1,1376 @@
+openapi: 3.0.3
+info:
+  title: E-Bike/Scooter Fleet API
+  version: 0.1.0
+  description: |
+    **Draft contract v0.1 (Week 1). Owner: Person 1.**
+    Used by the Android app (Person 4), the dashboard (Person 3), and the AI planner (Person 5).
+
+    ## Conventions
+    - Base path is `/api/v1`. JSON everywhere except the SSE stream.
+    - All IDs are UUIDs. All timestamps are ISO-8601 in **UTC** (e.g. `2026-11-09T08:30:00Z`).
+    - Clients may send an `X-Correlation-Id` header on any request. The server echoes it back
+      (or generates one) and includes it in error bodies and logs, which helps debugging
+      across services.
+    - **Errors** always use the `Error` schema. Malformed input is `400`, a missing resource is
+      `404`, and **every business-rule conflict is `409`**, with the detail in `code`.
+    - **Idempotency:** `POST /rentals` requires an `Idempotency-Key` header. Returning a rental
+      and approving/rejecting a proposal are naturally idempotent (repeating them returns the
+      same result).
+    - Lists return plain arrays and accept `limit` (default 100, max 500).
+    - There is no authentication in this version (out of scope).
+
+    ## Ownership
+    Everything is implemented by `fleet-management-service` (port 8080) **except** the
+    *Proposals* and *Planner* tags, which are implemented by `ai-planner` (port 8082,
+    owner Person 5) and shown here so the dashboard team has one contract to read.
+    Those two sections are **marked draft** until Person 5 confirms them.
+
+    ## Mock server for teammates
+    `npx @stoplight/prism-cli mock api/fleet-api.yaml` serves fake responses built from the
+    examples in this file.
+  contact:
+    name: Person 1 (Backend/Fleet Lead)
+servers:
+  - url: http://localhost:8080/api/v1
+    description: fleet-management-service (local Docker Compose)
+
+tags:
+  - name: Health
+  - name: Zones
+  - name: Vehicles
+  - name: Rentals
+  - name: Maintenance
+  - name: Fleet
+  - name: Proposals
+    description: Owned by ai-planner (Person 5). DRAFT, to be confirmed.
+  - name: Planner
+    description: Owned by ai-planner (Person 5). DRAFT, to be confirmed.
+
+paths:
+  # ---------------------------------------------------------------- Health
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Liveness check
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: UP
+
+  # ----------------------------------------------------------------- Zones
+  /zones:
+    get:
+      tags: [Zones]
+      operationId: listZones
+      summary: List all zones
+      description: Zones are named circular areas. The mobile app can use them for area selection.
+      responses:
+        '200':
+          description: All zones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Zone'
+
+  # -------------------------------------------------------------- Vehicles
+  /vehicles:
+    get:
+      tags: [Vehicles]
+      operationId: listVehicles
+      summary: List vehicles (dashboard view)
+      description: |
+        Returns vehicles with optional filters. Use `status=MAINTENANCE_REQUIRED` to get the
+        maintenance-required vehicles. For the rider's "vehicles near me" screen use
+        `GET /vehicles/nearby` instead.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/VehicleStatus'
+        - name: zoneId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: maxBattery
+          in: query
+          description: Only vehicles with battery at or below this value (low-battery view).
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Matching vehicles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Vehicle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      tags: [Vehicles]
+      operationId: registerVehicle
+      summary: Register a new vehicle
+      description: Creates the vehicle as `AVAILABLE` and publishes `VehicleRegistered`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleCreate'
+      responses:
+        '201':
+          description: Vehicle created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Label already exists (`DUPLICATE_VEHICLE_LABEL`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /vehicles/nearby:
+    get:
+      tags: [Vehicles]
+      operationId: listNearbyVehicles
+      summary: Nearby rentable vehicles (rider view)
+      description: |
+        Returns only **rentable** vehicles (`status = AVAILABLE` and battery at or above
+        `minBattery`), closest first, each with its distance in meters.
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+          example: 48.2100
+        - name: lon
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+          example: 16.3600
+        - name: radiusMeters
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 1000
+        - name: minBattery
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+            default: 20
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Rentable vehicles sorted by distance (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NearbyVehicle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /vehicles/{vehicleId}:
+    parameters:
+      - $ref: '#/components/parameters/VehicleId'
+    get:
+      tags: [Vehicles]
+      operationId: getVehicle
+      summary: Vehicle details including battery level
+      responses:
+        '200':
+          description: The vehicle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Vehicles]
+      operationId: updateVehicle
+      summary: Update vehicle details
+      description: Only the label can be changed. Status, battery and location are controlled by the system.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleUpdate'
+      responses:
+        '200':
+          description: Updated vehicle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Label already exists (`DUPLICATE_VEHICLE_LABEL`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /vehicles/{vehicleId}/maintenance:
+    parameters:
+      - $ref: '#/components/parameters/VehicleId'
+    post:
+      tags: [Maintenance]
+      operationId: reportMaintenance
+      summary: Manually report a problem (operator)
+      description: |
+        Opens a maintenance record. If the vehicle is `AVAILABLE` it becomes
+        `MAINTENANCE_REQUIRED`; if it is `RENTED` it stays `RENTED` until returned.
+        Idempotent: if an unresolved record with the same reason already exists, that record
+        is returned with `200`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceCreate'
+      responses:
+        '201':
+          description: New record created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRecord'
+        '200':
+          description: An unresolved record with this reason already existed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # --------------------------------------------------------------- Rentals
+  /rentals:
+    post:
+      tags: [Rentals]
+      operationId: startRental
+      summary: Start a rental
+      description: |
+        Rules: the vehicle must be `AVAILABLE` with battery of at least 20 percent, and the
+        rider must not already have an active rental.
+
+        **Idempotency:** generate a new UUID for each *user intention* and reuse it when
+        retrying the same tap after a network failure. A repeated call with the same key,
+        vehicle and rider returns the original rental with `200` instead of `201`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RentalStart'
+      responses:
+        '201':
+          description: Rental started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rental'
+        '200':
+          description: Repeat of an earlier request (same Idempotency-Key). Returns the original rental.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rental'
+        '400':
+          description: Validation error or `MISSING_IDEMPOTENCY_KEY`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Business-rule conflict. Check `code`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                vehicleNotAvailable:
+                  summary: Vehicle already rented or in maintenance
+                  value:
+                    code: VEHICLE_NOT_AVAILABLE
+                    message: Vehicle EB-003 is not available (status RENTED).
+                    timestamp: '2026-11-09T08:30:00Z'
+                    correlationId: 7f3c1d2e-9a41-4c55-8d0b-1f2e3a4b5c6d
+                batteryTooLow:
+                  summary: Battery below 20 percent
+                  value:
+                    code: BATTERY_TOO_LOW
+                    message: Vehicle ES-002 battery is 18 percent (minimum 20).
+                    timestamp: '2026-11-09T08:30:00Z'
+                    correlationId: 7f3c1d2e-9a41-4c55-8d0b-1f2e3a4b5c6d
+                riderHasActiveRental:
+                  summary: Rider already has an active rental
+                  value:
+                    code: RIDER_HAS_ACTIVE_RENTAL
+                    message: Rider rider-demo-1 already has an active rental.
+                    timestamp: '2026-11-09T08:30:00Z'
+                    correlationId: 7f3c1d2e-9a41-4c55-8d0b-1f2e3a4b5c6d
+                keyReused:
+                  summary: Idempotency key used with a different vehicle or rider
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was already used for a different request.
+                    timestamp: '2026-11-09T08:30:00Z'
+                    correlationId: 7f3c1d2e-9a41-4c55-8d0b-1f2e3a4b5c6d
+    get:
+      tags: [Rentals]
+      operationId: listRentals
+      summary: List rentals
+      description: |
+        The mobile app calls `?riderId=...&status=ACTIVE` on startup to find out whether the
+        rider has a trip in progress (for example after the app restarted).
+      parameters:
+        - name: riderId
+          in: query
+          schema:
+            type: string
+        - name: vehicleId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/RentalStatus'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Matching rentals, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Rental'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /rentals/{rentalId}:
+    parameters:
+      - $ref: '#/components/parameters/RentalId'
+    get:
+      tags: [Rentals]
+      operationId: getRental
+      summary: Get one rental
+      responses:
+        '200':
+          description: The rental
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rental'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /rentals/{rentalId}/return:
+    parameters:
+      - $ref: '#/components/parameters/RentalId'
+    post:
+      tags: [Rentals]
+      operationId: returnRental
+      summary: Return the vehicle and end the rental
+      description: |
+        Naturally idempotent: returning an already completed rental returns it unchanged
+        (`200`) and does not publish a second `RentalEnded` event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RentalReturn'
+      responses:
+        '200':
+          description: Completed rental
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rental'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ----------------------------------------------------------- Maintenance
+  /maintenance:
+    get:
+      tags: [Maintenance]
+      operationId: listMaintenance
+      summary: List maintenance records
+      description: By default returns unresolved records (`OPEN` and `IN_PROGRESS`).
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/MaintenanceStatus'
+        - name: vehicleId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: reason
+          in: query
+          schema:
+            $ref: '#/components/schemas/MaintenanceReason'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Matching records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaintenanceRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /maintenance/{maintenanceId}:
+    parameters:
+      - name: maintenanceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Maintenance]
+      operationId: updateMaintenance
+      summary: Move a record to IN_PROGRESS or RESOLVED
+      description: |
+        Allowed transitions: `OPEN` to `IN_PROGRESS`, `OPEN` to `RESOLVED`,
+        `IN_PROGRESS` to `RESOLVED`. Anything else gives `409 INVALID_STATUS_TRANSITION`.
+        Resolving the last unresolved record of a vehicle makes it `AVAILABLE` again.
+        Publishes `VehicleMaintenanceChanged`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceUpdate'
+      responses:
+        '200':
+          description: Updated record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Invalid status transition (`INVALID_STATUS_TRANSITION`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ----------------------------------------------------------------- Fleet
+  /fleet/status:
+    get:
+      tags: [Fleet]
+      operationId: getFleetStatus
+      summary: Fleet summary (counts, battery, per zone)
+      responses:
+        '200':
+          description: Current fleet status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetStatus'
+
+  /fleet/stream:
+    get:
+      tags: [Fleet]
+      operationId: streamFleetUpdates
+      summary: Live fleet updates (Server-Sent Events)
+      description: |
+        Keeps the HTTP connection open and pushes events as `text/event-stream`.
+        Browser usage: `new EventSource('http://localhost:8080/api/v1/fleet/stream')`.
+
+        | Event name | `data` payload | When |
+        |---|---|---|
+        | `vehicle.updated` | a `Vehicle` object | Any change to status, battery, location or zone |
+        | `fleet.status` | a `FleetStatus` object | After changes, at most once per second |
+        | `heartbeat` | empty JSON object `{}` | Every 15 seconds so proxies keep the connection open |
+
+        Every event has an increasing `id`. `EventSource` reconnects automatically. After a
+        reconnect, call `GET /fleet/status` and `GET /vehicles` once to resynchronise, because
+        events sent while disconnected are not replayed in v0.1.
+
+        Proposal changes are **not** streamed in v0.1. The dashboard polls `GET /proposals`.
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                id: 42
+                event: vehicle.updated
+                data: {"id":"b0000000-0000-0000-0000-000000000001","label":"EB-001","type":"E_BIKE","status":"RENTED","batteryPercent":91,"latitude":48.2104,"longitude":16.3601,"zoneId":"a0000000-0000-0000-0000-000000000001","rentable":false,"lastTelemetryAt":"2026-11-09T08:30:05Z","createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-09T08:30:05Z"}
+
+                id: 43
+                event: heartbeat
+                data: {}
+
+  # ------------------------------------------------------------- Proposals
+  /proposals:
+    servers:
+      - url: http://localhost:8082/api/v1
+        description: ai-planner (local Docker Compose)
+    get:
+      tags: [Proposals]
+      operationId: listProposals
+      summary: List AI proposals (DRAFT, owned by ai-planner)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ProposalStatus'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Proposals, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Proposal'
+
+  /proposals/{proposalId}:
+    servers:
+      - url: http://localhost:8082/api/v1
+        description: ai-planner (local Docker Compose)
+    parameters:
+      - $ref: '#/components/parameters/ProposalId'
+    get:
+      tags: [Proposals]
+      operationId: getProposal
+      summary: Get one proposal (DRAFT, owned by ai-planner)
+      responses:
+        '200':
+          description: The proposal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /proposals/{proposalId}/approve:
+    servers:
+      - url: http://localhost:8082/api/v1
+        description: ai-planner (local Docker Compose)
+    parameters:
+      - $ref: '#/components/parameters/ProposalId'
+    post:
+      tags: [Proposals]
+      operationId: approveProposal
+      summary: Approve a proposal (DRAFT, owned by ai-planner)
+      description: |
+        Only an operator can do this. Publishes `RebalancingProposalApproved`; the fleet
+        service reacts to that event. Idempotent: approving an already approved proposal
+        returns it unchanged. Approving a rejected proposal gives `409 PROPOSAL_ALREADY_DECIDED`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposalDecision'
+      responses:
+        '200':
+          description: Approved proposal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Already rejected (`PROPOSAL_ALREADY_DECIDED`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /proposals/{proposalId}/reject:
+    servers:
+      - url: http://localhost:8082/api/v1
+        description: ai-planner (local Docker Compose)
+    parameters:
+      - $ref: '#/components/parameters/ProposalId'
+    post:
+      tags: [Proposals]
+      operationId: rejectProposal
+      summary: Reject a proposal (DRAFT, owned by ai-planner)
+      description: |
+        Publishes `RebalancingProposalRejected`. Idempotent in the same way as approve.
+        Rejecting an approved proposal gives `409 PROPOSAL_ALREADY_DECIDED`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposalDecision'
+      responses:
+        '200':
+          description: Rejected proposal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Already approved (`PROPOSAL_ALREADY_DECIDED`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # --------------------------------------------------------------- Planner
+  /planner/runs:
+    servers:
+      - url: http://localhost:8082/api/v1
+        description: ai-planner (local Docker Compose)
+    post:
+      tags: [Planner]
+      operationId: triggerPlannerRun
+      summary: Trigger a planning run for demonstrations (DRAFT, owned by ai-planner)
+      description: |
+        Starts a run in the background and returns immediately. Poll
+        `GET /planner/runs/{runId}` until the status is `COMPLETED` or `FAILED`.
+        `MOCK` mode (default) needs no external LLM.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlannerRunRequest'
+      responses:
+        '202':
+          description: Run accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlannerRun'
+
+  /planner/runs/{runId}:
+    servers:
+      - url: http://localhost:8082/api/v1
+        description: ai-planner (local Docker Compose)
+    get:
+      tags: [Planner]
+      operationId: getPlannerRun
+      summary: Get a planner run (DRAFT, owned by ai-planner)
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlannerRun'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  # ----------------------------------------------------------- Parameters
+  parameters:
+    VehicleId:
+      name: vehicleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: b0000000-0000-0000-0000-000000000001
+    RentalId:
+      name: rentalId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: c0000000-0000-0000-0000-000000000001
+    ProposalId:
+      name: proposalId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: A client-generated UUID, one per user intention. Reuse it when retrying.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 100
+      example: 3b241101-e2bb-4255-8caf-4136c566a962
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of items to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+
+  # ------------------------------------------------------------ Responses
+  responses:
+    BadRequest:
+      description: Malformed or invalid input (`VALIDATION_ERROR`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: VALIDATION_ERROR
+            message: Request validation failed.
+            timestamp: '2026-11-09T08:30:00Z'
+            correlationId: 7f3c1d2e-9a41-4c55-8d0b-1f2e3a4b5c6d
+            details:
+              - field: latitude
+                issue: must be between -90 and 90
+    NotFound:
+      description: Resource does not exist (`NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: NOT_FOUND
+            message: Vehicle b0000000-0000-0000-0000-0000000000ff not found.
+            timestamp: '2026-11-09T08:30:00Z'
+            correlationId: 7f3c1d2e-9a41-4c55-8d0b-1f2e3a4b5c6d
+
+  # -------------------------------------------------------------- Schemas
+  schemas:
+    Error:
+      type: object
+      required: [code, message, timestamp]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable code. Clients should switch on this, not on `message`.
+          enum:
+            - VALIDATION_ERROR
+            - MISSING_IDEMPOTENCY_KEY
+            - NOT_FOUND
+            - VEHICLE_NOT_AVAILABLE
+            - BATTERY_TOO_LOW
+            - RIDER_HAS_ACTIVE_RENTAL
+            - IDEMPOTENCY_KEY_REUSED
+            - DUPLICATE_VEHICLE_LABEL
+            - INVALID_STATUS_TRANSITION
+            - PROPOSAL_ALREADY_DECIDED
+            - INTERNAL_ERROR
+        message:
+          type: string
+          description: Human-readable explanation (may change, do not parse).
+        timestamp:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+        details:
+          type: array
+          description: Field-level problems for `VALIDATION_ERROR`.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              issue:
+                type: string
+
+    VehicleType:
+      type: string
+      enum: [E_BIKE, E_SCOOTER]
+    VehicleStatus:
+      type: string
+      enum: [AVAILABLE, RENTED, MAINTENANCE_REQUIRED]
+    RentalStatus:
+      type: string
+      enum: [ACTIVE, COMPLETED]
+    MaintenanceReason:
+      type: string
+      enum: [LOW_BATTERY, FAULT, MANUAL]
+    MaintenanceStatus:
+      type: string
+      enum: [OPEN, IN_PROGRESS, RESOLVED]
+
+    Zone:
+      type: object
+      required: [id, name, centerLatitude, centerLongitude, radiusMeters]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        centerLatitude:
+          type: number
+          format: double
+        centerLongitude:
+          type: number
+          format: double
+        radiusMeters:
+          type: integer
+      example:
+        id: a0000000-0000-0000-0000-000000000001
+        name: Campus
+        centerLatitude: 48.21
+        centerLongitude: 16.36
+        radiusMeters: 1000
+
+    Vehicle:
+      type: object
+      required: [id, label, type, status, batteryPercent, latitude, longitude, rentable]
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+          description: Human-readable code on the vehicle.
+        type:
+          $ref: '#/components/schemas/VehicleType'
+        status:
+          $ref: '#/components/schemas/VehicleStatus'
+        batteryPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        zoneId:
+          type: string
+          format: uuid
+          nullable: true
+        rentable:
+          type: boolean
+          readOnly: true
+          description: Derived. True when status is AVAILABLE and battery is at least 20 percent.
+        lastTelemetryAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: b0000000-0000-0000-0000-000000000001
+        label: EB-001
+        type: E_BIKE
+        status: AVAILABLE
+        batteryPercent: 92
+        latitude: 48.2102
+        longitude: 16.3598
+        zoneId: a0000000-0000-0000-0000-000000000001
+        rentable: true
+        lastTelemetryAt: '2026-11-09T08:29:50Z'
+        createdAt: '2026-11-01T10:00:00Z'
+        updatedAt: '2026-11-09T08:29:50Z'
+
+    NearbyVehicle:
+      allOf:
+        - $ref: '#/components/schemas/Vehicle'
+        - type: object
+          required: [distanceMeters]
+          properties:
+            distanceMeters:
+              type: integer
+              description: Straight-line distance from the requested point.
+      example:
+        id: b0000000-0000-0000-0000-000000000001
+        label: EB-001
+        type: E_BIKE
+        status: AVAILABLE
+        batteryPercent: 92
+        latitude: 48.2102
+        longitude: 16.3598
+        zoneId: a0000000-0000-0000-0000-000000000001
+        rentable: true
+        lastTelemetryAt: '2026-11-09T08:29:50Z'
+        createdAt: '2026-11-01T10:00:00Z'
+        updatedAt: '2026-11-09T08:29:50Z'
+        distanceMeters: 28
+
+    VehicleCreate:
+      type: object
+      required: [label, type, latitude, longitude, batteryPercent]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 50
+        type:
+          $ref: '#/components/schemas/VehicleType'
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        batteryPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+      example:
+        label: EB-007
+        type: E_BIKE
+        latitude: 48.2101
+        longitude: 16.3603
+        batteryPercent: 100
+
+    VehicleUpdate:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 50
+      example:
+        label: EB-001-NEW
+
+    Rental:
+      type: object
+      required: [id, vehicleId, riderId, status, startedAt, startLatitude, startLongitude, startBatteryPercent]
+      properties:
+        id:
+          type: string
+          format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+        riderId:
+          type: string
+        status:
+          $ref: '#/components/schemas/RentalStatus'
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        startLatitude:
+          type: number
+          format: double
+        startLongitude:
+          type: number
+          format: double
+        endLatitude:
+          type: number
+          format: double
+          nullable: true
+        endLongitude:
+          type: number
+          format: double
+          nullable: true
+        startBatteryPercent:
+          type: integer
+        endBatteryPercent:
+          type: integer
+          nullable: true
+      example:
+        id: c0000000-0000-0000-0000-000000000001
+        vehicleId: b0000000-0000-0000-0000-000000000005
+        riderId: rider-demo-1
+        status: ACTIVE
+        startedAt: '2026-11-09T08:20:00Z'
+        endedAt: null
+        startLatitude: 48.1858
+        startLongitude: 16.3758
+        endLatitude: null
+        endLongitude: null
+        startBatteryPercent: 70
+        endBatteryPercent: null
+
+    RentalStart:
+      type: object
+      required: [vehicleId, riderId]
+      properties:
+        vehicleId:
+          type: string
+          format: uuid
+        riderId:
+          type: string
+          minLength: 1
+          maxLength: 64
+      example:
+        vehicleId: b0000000-0000-0000-0000-000000000001
+        riderId: rider-demo-2
+
+    RentalReturn:
+      type: object
+      required: [latitude, longitude]
+      description: Where the rider parked the vehicle.
+      properties:
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+      example:
+        latitude: 48.2099
+        longitude: 16.3605
+
+    MaintenanceRecord:
+      type: object
+      required: [id, vehicleId, reason, status, openedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+        reason:
+          $ref: '#/components/schemas/MaintenanceReason'
+        status:
+          $ref: '#/components/schemas/MaintenanceStatus'
+        faultCode:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        openedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+      example:
+        id: d0000000-0000-0000-0000-000000000002
+        vehicleId: b0000000-0000-0000-0000-000000000012
+        reason: FAULT
+        status: OPEN
+        faultCode: BRAKE_SENSOR
+        description: Brake sensor reported an error
+        openedAt: '2026-11-09T07:45:00Z'
+        resolvedAt: null
+
+    MaintenanceCreate:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: Operators can report `FAULT` or `MANUAL`. `LOW_BATTERY` is created automatically.
+          enum: [FAULT, MANUAL]
+        faultCode:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          maxLength: 500
+      example:
+        reason: MANUAL
+        description: Flat tyre reported by a rider
+
+    MaintenanceUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [IN_PROGRESS, RESOLVED]
+        description:
+          type: string
+          maxLength: 500
+      example:
+        status: RESOLVED
+        description: Battery swapped
+
+    FleetStatus:
+      type: object
+      required: [generatedAt, totalVehicles, countByStatus, activeRentals, lowBatteryCount, averageBatteryPercent, zones]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        totalVehicles:
+          type: integer
+        countByStatus:
+          type: object
+          required: [AVAILABLE, RENTED, MAINTENANCE_REQUIRED]
+          properties:
+            AVAILABLE:
+              type: integer
+            RENTED:
+              type: integer
+            MAINTENANCE_REQUIRED:
+              type: integer
+        activeRentals:
+          type: integer
+        lowBatteryCount:
+          type: integer
+          description: Vehicles with battery under 20 percent, in any status.
+        averageBatteryPercent:
+          type: number
+          format: double
+        zones:
+          type: array
+          items:
+            type: object
+            required: [zoneId, zoneName, available, rented, maintenanceRequired]
+            properties:
+              zoneId:
+                type: string
+                format: uuid
+              zoneName:
+                type: string
+              available:
+                type: integer
+              rented:
+                type: integer
+              maintenanceRequired:
+                type: integer
+      example:
+        generatedAt: '2026-11-09T08:30:00Z'
+        totalVehicles: 12
+        countByStatus:
+          AVAILABLE: 8
+          RENTED: 1
+          MAINTENANCE_REQUIRED: 2
+        activeRentals: 1
+        lowBatteryCount: 1
+        averageBatteryPercent: 62.7
+        zones:
+          - zoneId: a0000000-0000-0000-0000-000000000001
+            zoneName: Campus
+            available: 3
+            rented: 0
+            maintenanceRequired: 1
+
+    # ---- DRAFT: owned by ai-planner (Person 5), to be confirmed ----------
+    ProposalStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED]
+
+    ProposalAction:
+      type: object
+      required: [type, vehicleId]
+      properties:
+        type:
+          type: string
+          enum: [CHARGE, MOVE]
+        vehicleId:
+          type: string
+          format: uuid
+        fromZoneId:
+          type: string
+          format: uuid
+          nullable: true
+        toZoneId:
+          type: string
+          format: uuid
+          nullable: true
+        reason:
+          type: string
+
+    Proposal:
+      type: object
+      description: DRAFT. Shape to be confirmed by Person 5.
+      required: [id, plannerRunId, status, actions, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        plannerRunId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ProposalStatus'
+        summary:
+          type: string
+          description: Short explanation shown to the operator.
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalAction'
+        inputDataVersion:
+          type: string
+          description: Which read-model snapshot the planner used (for traceability).
+        modelId:
+          type: string
+          description: LLM name, or `mock` in mock mode.
+        createdAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        decidedBy:
+          type: string
+          nullable: true
+        decisionComment:
+          type: string
+          nullable: true
+      example:
+        id: e0000000-0000-0000-0000-000000000001
+        plannerRunId: f0000000-0000-0000-0000-000000000001
+        status: PENDING
+        summary: Move 2 scooters to Campus and charge 1 low-battery bike.
+        actions:
+          - type: CHARGE
+            vehicleId: b0000000-0000-0000-0000-000000000011
+            reason: Battery is 8 percent
+          - type: MOVE
+            vehicleId: b0000000-0000-0000-0000-000000000007
+            fromZoneId: a0000000-0000-0000-0000-000000000002
+            toZoneId: a0000000-0000-0000-0000-000000000001
+            reason: Campus has high morning demand and only 3 available vehicles
+        inputDataVersion: readmodel-2026-11-09T08:00:00Z
+        modelId: mock
+        createdAt: '2026-11-09T08:00:05Z'
+        decidedAt: null
+        decidedBy: null
+        decisionComment: null
+
+    ProposalDecision:
+      type: object
+      required: [operatorId]
+      properties:
+        operatorId:
+          type: string
+          description: Who decided (free text, no authentication in this version).
+        comment:
+          type: string
+          maxLength: 500
+      example:
+        operatorId: operator-1
+        comment: Looks reasonable
+
+    PlannerRunRequest:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [MOCK, LLM]
+          default: MOCK
+      example:
+        mode: MOCK
+
+    PlannerRun:
+      type: object
+      required: [id, status, mode, startedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [RUNNING, COMPLETED, FAILED]
+        mode:
+          type: string
+          enum: [MOCK, LLM]
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        proposalIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        errorMessage:
+          type: string
+          nullable: true
+      example:
+        id: f0000000-0000-0000-0000-000000000001
+        status: RUNNING
+        mode: MOCK
+        startedAt: '2026-11-09T08:00:00Z'
+        finishedAt: null
+        proposalIds: []
+        errorMessage: null
