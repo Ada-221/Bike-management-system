@@ -1,0 +1,7 @@
+services:
+  operator-dashboard:
+    build:
+      context: ./operator-dashboard
+    ports:
+      - "8081:80"
+    restart: unless-stopped
