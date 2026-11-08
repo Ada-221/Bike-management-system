@@ -1,0 +1,14 @@
+{
+  "eventId": "evt_001",
+  "eventType": "VehicleTelemetryReceived",
+  "schemaVersion": "1.0",
+  "timestamp": "2026-11-05T20:00:00Z",
+  "vehicleId": "veh_001",
+  "correlationId": "corr_001",
+  "producer": "telemetry-ingestion-service",
+  "payload": {
+    "batteryPercent": 70,
+    "latitude": 45.7489,
+    "longitude": 21.2087
+  }
+}
