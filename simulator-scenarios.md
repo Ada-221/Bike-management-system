@@ -25,8 +25,8 @@ Expected: validation rejects the measurement.
 
 ## 6. Vehicle fault
 Simulate a vehicle fault.
-Use fault-example.draft.json (VehicleFaultReported, BRAKE_FAILURE).
-Validate against fault.schema.draft.json. Backend state changes and the final fault-code list still require agreement.
+Use [fault-example.json](fault-example.json) (VehicleFaultReported, BRAKE_FAILURE).
+Validate against [fault.schema.json](fault.schema.json). Backend state changes and the final fault-code list still require agreement.
 
 ## Reproducibility
 Use fixed IDs, measurement times, and starting values.

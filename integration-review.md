@@ -1,5 +1,10 @@
 # Event / Telemetry integration review — Draft
 
+This file is the current register for unresolved cross-component integration
+decisions. Items remain pending until affected owners or the project lead/team
+record an outcome and rationale here. The project-wide map and decision process
+are in [architecture and agent conventions](docs/architecture-and-agent-conventions.md).
+
 Based on the teammate drafts reviewed on 2026-11-08. This is a decision list, not team approval. Existing draft examples remain usable for local schema checks only.
 
 | Item | Current telemetry draft | Reviewed teammate contract | Required decision |

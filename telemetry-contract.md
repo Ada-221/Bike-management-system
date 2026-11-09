@@ -68,4 +68,4 @@ Open decisions:
 
 ## Integration status
 
-These examples validate against the included draft schemas. They are not yet a finalized Backend-compatible wire contract. See [integration-review.draft.md](integration-review.draft.md) for the concrete differences and owners.
+These examples validate against the included draft schemas. They are not yet a finalized Backend-compatible wire contract. See the [integration decision register](integration-review.md) for the concrete differences and affected owners.

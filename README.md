@@ -8,6 +8,7 @@ charging and redistribution proposals.
 
 ## Documentation
 
+- [Architecture and agent conventions](docs/architecture-and-agent-conventions.md)
 - [Six-week implementation plan](docs/project/CEBP_Project2_Implementation_Plan.md)
 - [Week 1 implementation summary](docs/project/week-1-implementation.md)
 - [AI/MCP Week 1 contracts](contracts/ai-mcp/v1/README.md)
