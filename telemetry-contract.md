@@ -12,8 +12,8 @@ top level. Timestamps are UTC ISO-8601 strings ending in `Z`. `measuredAt` is
 when the sensor made the observation; `publishedAt` is when the normalized event
 was published. The timestamps are distinct fields and may have different values.
 
-`vehicleId` uses a stable `veh_…` identifier. Battery event IDs use the
-`battery_…` prefix; location event IDs use `location_…`. A retry preserves its
+`vehicleId` uses a stable `veh_` identifier. Both battery and location event
+IDs use the `evt_` prefix, matching the Java producer. A retry preserves its
 event ID. The producer is `telemetry-ingestion-service`.
 
 ## Event payloads

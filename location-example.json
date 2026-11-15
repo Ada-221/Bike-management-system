@@ -1,5 +1,5 @@
 {
-  "eventId": "location_evt_0001",
+  "eventId": "evt_00000000-0000-4000-8000-000000000002",
   "eventType": "VehicleLocationUpdated",
   "schemaVersion": "1.0",
   "vehicleId": "veh_0001",

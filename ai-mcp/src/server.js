@@ -74,8 +74,7 @@ if (process.argv[1] && new URL(import.meta.url).pathname.toLowerCase() === new U
   const port = Number(process.env.PORT ?? 8083);
   const backendUrl = process.env.BACKEND_API_URL ?? "http://127.0.0.1:8080/api/v1/";
   const areaMap = parseMap(process.env.MCP_AREA_ZONE_MAP_JSON, "MCP_AREA_ZONE_MAP_JSON");
-  const vehicleMap = parseMap(process.env.MCP_VEHICLE_ID_MAP_JSON, "MCP_VEHICLE_ID_MAP_JSON");
   const stateDir = process.env.MCP_STATE_DIR ?? "./data";
-  const service = createService({ backend: createBackend(backendUrl), areaMap, vehicleMap, store: createJsonStore(stateDir) });
+  const service = createService({ backend: createBackend(backendUrl), areaMap, store: createJsonStore(stateDir) });
   createHttpServer(service).listen(port, "0.0.0.0", () => process.stdout.write(`cebp-mcp-server listening on 0.0.0.0:${port}\n`));
 }

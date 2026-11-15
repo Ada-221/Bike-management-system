@@ -10,20 +10,29 @@ From this directory, use Node.js 22.12 or newer:
 
 ```powershell
 $env:BACKEND_API_URL = "http://localhost:8080/api/v1/"
-$env:MCP_AREA_ZONE_MAP_JSON = '{"area_campus":"<backend-zone-uuid>"}'
-$env:MCP_VEHICLE_ID_MAP_JSON = '{"<backend-vehicle-uuid>":"veh_0001"}'
+$env:MCP_AREA_ZONE_MAP_JSON = '{"area_center":"zone_001","area_south":"zone_002"}'
 npm.cmd start
 ```
 
-The backend adapter reads `GET /vehicles?limit=500` and `GET /zones`. Configure
-stable ID maps with backend-issued identifiers. Area mappings are verified against
-the backend zone list on each query; unknown mappings return `UNKNOWN_AREA`.
-Vehicle public IDs must be explicit `veh_…` identifiers. The service does not
-derive IDs or zone UUIDs. Fleet status translation is confined to the MCP adapter.
-The MCP v1 contract reports `batteryMeasuredAt` and `locationMeasuredAt`
-independently. The backend must expose both fields and a real `availableSince`
-value before the availability tool can return a successful response; the
-adapter does not substitute vehicle creation or telemetry time.
+The backend adapter reads `GET /api/v1/vehicles?limit=500` and preserves the
+configured base path with or without a trailing slash. Backend-issued `veh_...`
+IDs are used directly. There is no vehicle ID mapping or dependency on `/zones`.
+Configure explicit `area_...` to `zone_...` mappings; malformed identifiers and
+multiple areas pointing at one zone fail at startup. Unknown query areas return
+`UNKNOWN_AREA`; low-battery records without a mapped area fail clearly.
+Fleet status translation is confined to the MCP adapter.
+
+Backend `lastBatteryAt` and `lastLocationAt` become `batteryMeasuredAt` and
+`locationMeasuredAt`. Missing measurement timestamps fail validation.
+`availableSince` is always null because the backend does not expose status-since
+data. Availability keeps AVAILABLE status and minimum-battery filtering.
+Snapshots containing 500 records are rejected because the backend cap prevents
+proving completeness; totals are only reported for smaller snapshots.
+
+Compose defaults to `http://fleet-management-service:8080/api/v1/` for the
+combined environment after team integration. Override `BACKEND_API_URL` with
+`http://host.docker.internal:8080/api/v1/` for a standalone host backend. This
+branch does not merge the backend or telemetry implementations.
 
 ## Check and exercise
 
@@ -62,6 +71,9 @@ They do not call fleet APIs or publish operational commands.
   production database adapter are deferred.
 - Demand queries return a structured unavailable result until demand event
   ownership and payload are agreed.
-- Pagination cursors are process-local and become invalid after a restart.
+- Pagination cursors are process-local, single-use, expire after 15 minutes, and
+  become invalid after a restart, query change, or fleet snapshot change.
+- The mock planner recommends up to five available vehicles by paging through low-battery
+  tool results, recording a hash of each actual schema-valid result as evidence.
 - OFFLINE rules, fault description validation, and approval-driven operations
   remain unimplemented pending their integration decisions.

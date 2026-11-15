@@ -20,7 +20,7 @@
       "additionalProperties": false,
       "required": ["eventId", "eventType", "schemaVersion", "vehicleId", "measuredAt", "publishedAt", "correlationId", "producer", "payload"],
       "properties": {
-        "eventId": { "type": "string", "pattern": "^battery_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+        "eventId": { "type": "string", "pattern": "^evt_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
         "eventType": { "const": "VehicleBatteryUpdated" },
         "schemaVersion": { "const": "1.0" },
         "vehicleId": { "$ref": "#/$defs/vehicleId" },
@@ -41,7 +41,7 @@
       "additionalProperties": false,
       "required": ["eventId", "eventType", "schemaVersion", "vehicleId", "measuredAt", "publishedAt", "correlationId", "producer", "payload"],
       "properties": {
-        "eventId": { "type": "string", "pattern": "^location_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+        "eventId": { "type": "string", "pattern": "^evt_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
         "eventType": { "const": "VehicleLocationUpdated" },
         "schemaVersion": { "const": "1.0" },
         "vehicleId": { "$ref": "#/$defs/vehicleId" },

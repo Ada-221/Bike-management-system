@@ -84,3 +84,12 @@ duplicate decisions or events.
 Exit requires every non-negotiable evaluation gate, all high-priority tests above,
 and no unresolved critical/high safety defect. Optional live-LLM quality is reported
 separately and cannot block deterministic core operation.
+
+## Week 2 adapter acceptance
+
+Run `npm.cmd test --prefix ai-mcp` and `npm.cmd run check --prefix ai-mcp`.
+Tests cover real DTO names and prefixed IDs, retained API paths, explicit zone
+mappings, null availableSince, status/battery filters, backend errors, cursor
+continuation/rejection, the 500-record cap, actual tool-result evidence hashes,
+and proposal persistence and approval without fleet changes. Docker and backend
+smoke-test results are recorded in `week-2-verification.md`.

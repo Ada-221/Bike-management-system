@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - "ai-mcp/**"
+      - "compose.yaml"
+      - ".dockerignore"
       - "contracts/ai-mcp/v1/**"
       - "integration-review.md"
       - "kafka-topics.md"
@@ -15,6 +17,8 @@ on:
   pull_request:
     paths:
       - "ai-mcp/**"
+      - "compose.yaml"
+      - ".dockerignore"
       - "contracts/ai-mcp/v1/**"
       - "integration-review.md"
       - "kafka-topics.md"

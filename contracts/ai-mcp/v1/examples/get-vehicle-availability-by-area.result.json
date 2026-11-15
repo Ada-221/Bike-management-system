@@ -5,8 +5,8 @@
   "areaId": "area_campus",
   "availableCount": 2,
   "vehicles": [
-    { "vehicleId": "veh_0015", "batteryPercent": 74, "batteryMeasuredAt": "2026-11-04T07:09:30Z", "location": { "latitude": 45.7479, "longitude": 21.2267 }, "locationMeasuredAt": "2026-11-04T07:09:45Z", "availableSince": "2026-11-04T07:10:00Z" },
-    { "vehicleId": "veh_0021", "batteryPercent": 66, "batteryMeasuredAt": "2026-11-04T07:29:40Z", "location": { "latitude": 45.7482, "longitude": 21.2271 }, "locationMeasuredAt": "2026-11-04T07:29:55Z", "availableSince": "2026-11-04T07:30:00Z" }
+    { "vehicleId": "veh_0015", "batteryPercent": 74, "batteryMeasuredAt": "2026-11-04T07:09:30Z", "location": { "latitude": 45.7479, "longitude": 21.2267 }, "locationMeasuredAt": "2026-11-04T07:09:45Z", "availableSince": null },
+    { "vehicleId": "veh_0021", "batteryPercent": 66, "batteryMeasuredAt": "2026-11-04T07:29:40Z", "location": { "latitude": 45.7482, "longitude": 21.2271 }, "locationMeasuredAt": "2026-11-04T07:29:55Z", "availableSince": null }
   ],
   "pagination": { "hasMore": false }
 }
