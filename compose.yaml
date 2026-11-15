@@ -66,6 +66,29 @@ services:
       timeout: 5s
       retries: 12
 
+  ai-mcp-schema-viewer:
+    build:
+      context: ./schema-viewer
+    ports:
+      - "8082:80"
+    volumes:
+      - ./contracts/ai-mcp/v1:/usr/share/nginx/html/contracts:ro
+    restart: unless-stopped
+  ai-mcp-service:
+    build:
+      context: .
+      dockerfile: ai-mcp/Dockerfile
+    ports:
+      - "8083:8083"
+    environment:
+      BACKEND_API_URL: ${BACKEND_API_URL:-http://fleet-management-service:8080/api/v1/}
+      MCP_AREA_ZONE_MAP_JSON: ${MCP_AREA_ZONE_MAP_JSON:-}
+      MCP_STATE_DIR: /data
+    volumes:
+      - ai-mcp-state:/data
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   kafka-data:
+  ai-mcp-state:

@@ -63,3 +63,18 @@ future contract outside this milestone.
 - `schemas/`: standalone input/output and proposal schemas.
 - `examples/`: valid arguments, results, protocol envelope, and proposal.
 - `fixtures/invalid/`: intentionally invalid data and a reason manifest.
+
+## Week 2 implementation reconciliation
+
+The approved Week 2 reconciliation uses backend-issued `veh_...` IDs directly,
+explicit validated `area_...` to `zone_...` configuration, and backend
+`lastBatteryAt`/`lastLocationAt` measurement timestamps. `availableSince`
+now also accepts null, and the Week 2 adapter always returns null. Consumers
+must accept null before upgrading; existing timestamp examples remain valid.
+The producer emits separate battery/location events with unique `evt_...` IDs.
+
+Pagination uses opaque schema-valid tokens bound to the tool, query, and fleet
+snapshot. Snapshots at the backend 500-record cap fail as unavailable rather
+than reporting potentially incomplete totals. Planner evidence hashes the actual
+low-battery tool result. Approval remains advisory, including after restart.
+Demand, Kafka projection, and OFFLINE rules remain deferred.

@@ -1,71 +1,46 @@
-# Telemetry Contract — Draft
+# Telemetry contract — settled measurement events
 
-Status: Draft for team review.
+Battery and location are separate events on the existing `fleet.vehicle` Kafka
+topic. The Kafka record key is the same `vehicleId` carried in the event. Do not
+publish a combined battery/location event for the same measurements.
 
-## Topic
-Proposed topic: vehicle.telemetry
+## Shared event envelope
 
-## Event
-VehicleTelemetryReceived
+Each event carries `eventId`, `eventType`, `schemaVersion`, `vehicleId`,
+`measuredAt`, `publishedAt`, `correlationId`, `producer`, and `payload` at the
+top level. Timestamps are UTC ISO-8601 strings ending in `Z`. `measuredAt` is
+when the sensor made the observation; `publishedAt` is when the normalized event
+was published. The timestamps are distinct fields and may have different values.
 
-## Common fields
-- eventId: Unique message ID. Preserved when the same message is retried.
-- eventType: Type of the event; fixed by its specific schema.
-- schemaVersion: 1.0.
-- timestamp: Measurement time in UTC, ending in Z.
-- vehicleId: ID of the vehicle being measured.
-- correlationId: Shared tracking ID for related processing steps.
-- producer: Name of the service publishing the event.
-- payload: Event-specific data, as defined by the event schema.
+`vehicleId` uses a stable `veh_` identifier. Both battery and location event
+IDs use the `evt_` prefix, matching the Java producer. A retry preserves its
+event ID. The producer is `telemetry-ingestion-service`.
 
-## Telemetry fields
-- batteryPercent: Integer from 0 to 100.
-- latitude: Number from -90 to 90.
-- longitude: Number from -180 to 180.
+## Event payloads
 
-## Review needed
-- Confirm topic and field names with Backend and AI/MCP owners.
-- Confirm timestamp semantics and handling of out-of-order measurements.
-- Review and finalize the proposed fault format and fault codes.
+- `VehicleBatteryUpdated`: `{ "batteryPercent": 0..100 }`.
+- `VehicleLocationUpdated`: `{ "latitude": -90..90, "longitude": -180..180 }`.
 
-## Proposed MCP read-model mapping
+See [battery example](telemetry-example.json) and
+[location example](location-example.json). The combined
+[`telemetry.schema.json`](telemetry.schema.json) accepts exactly one of the two
+event shapes.
 
-- Current draft vehicleId uses the AI/MCP prefixed ID pattern. Backend uses UUIDs; direct integration requires a shared ID decision or an explicit mapping.
-- payload.batteryPercent maps to batteryPercent.
-- payload.latitude maps to location.latitude.
-- payload.longitude maps to location.longitude.
-- timestamp represents measurement time and maps to telemetryAt.
+## Independent measurement freshness
 
-## Decisions requiring Backend and AI/MCP review
+Consumers track the most recent accepted `measuredAt` separately for battery
+and location. A newer battery event does not make a location event stale, or
+vice versa. How distinct events with equal measurement times are ordered is
+still open and must not be assumed by a consumer.
 
-- Define how vehicle coordinates are assigned to an areaId.
-- Define which fleet events supply operationalStatus.
-- Define which fleet events establish availableSince.
-- Do not use telemetry measurement time as availableSince.
-- Confirm the mapping before implementation.
+## Still open
 
-## VehicleFaultReported — Draft
+- The `OFFLINE` timeout and evidence rule.
+- Fault description requiredness and blank/length rules, fault code list,
+  repeated-fault behavior, and resolution event.
+- Kafka retention, retry, dead-letter, and complete producer/consumer details.
+- Exact handling of equal measurement timestamps.
 
-Purpose: Report an observed vehicle fault.
-Proposed topic: vehicle.telemetry.
-
-Uses the common event envelope.
-For this event, timestamp means the time the fault was observed.
-
-Required payload fields:
-- faultCode: String of 1–50 characters identifying the fault type. The limit matches the reviewed Backend database column.
-- description: Non-empty string describing the fault.
-
-BRAKE_FAILURE is a synthetic example, not a finalized fault-code list.
-
-A fault report does not itself define a vehicle status change.
-Backend rules determine its effect on availability and maintenance.
-
-Open decisions:
-- Agree on supported fault codes.
-- Define how fault resolution is reported.
-- Define how repeated reports of the same fault are handled.
-
-## Integration status
-
-These examples validate against the included draft schemas. They are not yet a finalized Backend-compatible wire contract. See the [integration decision register](integration-review.md) for the concrete differences and affected owners.
+See the [integration decision register](integration-review.md) for owners and
+the rest of the unresolved integration decisions. This file does not settle
+fault payload validation or those operational policies.

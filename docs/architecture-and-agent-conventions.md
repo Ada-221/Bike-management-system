@@ -6,6 +6,22 @@ documents remain authoritative for their own details. Cross-component proposals
 remain drafts until the affected owners agree and the decision is recorded in the
 [integration decision register](../integration-review.md).
 
+## Approved Week 2 reconciliation
+
+The MCP implementation now exposes read-only tools against the implemented fleet
+backend on its separate branch. See [service guidance](../ai-mcp/README.md) and
+[verification results](ai-mcp/week-2-verification.md). The branch implementations
+remain separate until final team integration; the status table below describes
+the historical Week 1 architecture baseline.
+
+The approved reconciliation supersedes UUID mapping assumptions below: backend
+vehicle IDs are used directly as `veh_` IDs, and configured MCP `area_` IDs map
+to backend `zone_` IDs without a `/zones` request. Backend `lastBatteryAt` and
+`lastLocationAt` provide measurement timestamps; `availableSince` is nullable
+and currently null. Telemetry battery/location events use unique `evt_` IDs.
+Status translation and advisory approval stay in MCP. Demand, Kafka projection,
+and OFFLINE rules remain deferred. Backend and telemetry code remain unchanged.
+
 ## Architecture map
 
 The six-week project plan is the source for intended responsibilities and
