@@ -14,7 +14,7 @@ Telemetry battery and location updates are separate events on `fleet.vehicle`.
 Battery and location messages carry top-level `eventId`, `eventType`,
 `schemaVersion`, `vehicleId`, `measuredAt`, `publishedAt`, `correlationId`,
 `producer`, and `payload`. `measuredAt` and `publishedAt` are distinct UTC
-timestamps. Event IDs use distinct `battery_…` or `location_…` prefixes and are
+timestamps. Each separate event uses its own distinct `evt_` ID; IDs are
 preserved for retries. The producer is `telemetry-ingestion-service`.
 
 The Kafka record key is `vehicleId`, matching the event field. Kafka ordering

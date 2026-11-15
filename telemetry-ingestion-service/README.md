@@ -1,37 +1,36 @@
-# Week 2 Telemetry Demo
+﻿# Week 2 Telemetry Demo
 
-Open Docker Desktop and run these commands from the project root.
+From the repository root, copy `.env.example` to `.env` first. The normal stack
+and even the telemetry profile leave the simulator disabled.
 
-1. Start Kafka.
+```bash
+docker compose --profile telemetry up --build -d --wait kafka telemetry
+```
 
-   ```bash
-   docker compose up -d --wait kafka
-   ```
+Enable the simulator explicitly for one demo run (PowerShell users can enter
+this command on one line):
 
-2. Start the telemetry service with the simulator enabled.
+```bash
+docker compose --profile telemetry run --rm -e TELEMETRY_SIMULATOR_ENABLED=true telemetry
+```
 
-   ```bash
-   docker run --rm -it \
-     --network bike-management-system_default \
-     -e KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
-     -e TELEMETRY_SIMULATOR_ENABLED=true \
-     -v "$PWD/telemetry-ingestion-service:/app" \
-     -w /app \
-     maven:3-eclipse-temurin-17 mvn spring-boot:run
-   ```
+The web application remains running after publishing, so stop the one-off
+container with Ctrl+C after the two `Published measurement` lines. Compose
+selects the network automatically; no project-specific network name is needed.
+The image connects to `kafka:9092` and waits for Kafka health.
 
-3. Once you see two `Published measurement` lines, open another terminal
-   in the project root and read the Kafka messages.
+In a second terminal, read the records:
 
-   ```bash
-   docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
-     --bootstrap-server kafka:9092 \
-     --topic fleet.vehicle --from-beginning \
-     --property print.key=true --max-messages 4 --timeout-ms 10000
-   ```
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic fleet.vehicle --from-beginning --property print.key=true --max-messages 4 --timeout-ms 10000
+```
 
 On a fresh topic, expect two battery events (75% and 74%) and two location
-events, all with the key `veh_001`. On an existing topic, `--from-beginning`
-can show records from earlier runs.
+events, keyed `veh_001`, each with its own distinct `evt_` event ID. On an existing
+topic, `--from-beginning` can return older records. For a repeatable check of fresh
+records against the shared schema, run `node scripts/compose-smoke.mjs`; it uses
+an isolated project and fresh volumes and captures logs under `build/`.
 
-The local Kafka flow was verified. Fleet backend integration is pending.
+Telemetry does not update fleet state: backend consumers and the MCP Kafka
+projection remain deferred. The host-side standalone default is
+`localhost:29092`; override `KAFKA_BOOTSTRAP_SERVERS` when running elsewhere.

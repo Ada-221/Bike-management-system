@@ -19,7 +19,13 @@ charging and redistribution proposals.
 
 ## Local Docker services
 
-Start the operator dashboard, AI/MCP schema explorer, and MCP service with `docker compose up --build`.
+Copy `.env.example` to `.env` (`Copy-Item .env.example .env` in PowerShell), then
+run `docker compose up --build -d --wait`. This starts PostgreSQL, Kafka, the
+fleet backend, dashboard, schema explorer and MCP. The example maps
+`area_center` to `zone_001` and `area_south` to `zone_002`, matching development
+zone seeds. Override the local database password before using shared hosts.
+
+- Fleet health: <http://localhost:8080/api/v1/health>
 
 - Operator dashboard: <http://localhost:8081>
 - AI/MCP schema explorer: <http://localhost:8082>
@@ -29,7 +35,27 @@ The schema explorer reads the v1 manifest and schemas from a read-only Docker vo
 so it reflects the contract files in `contracts/ai-mcp/v1` without copying them into
 the viewer image.
 
+MCP waits for backend health and exposes dependency readiness at
+<http://localhost:8083/ready>. Its internal backend URL is
+`http://fleet-management-service:8080/api/v1/`; `BACKEND_API_URL` can override it
+for standalone deployments. PostgreSQL, Kafka and MCP state have named volumes.
+
+Telemetry is opt-in: see the [telemetry demo](telemetry-ingestion-service/README.md).
+The `telemetry` profile uses `kafka:9092`; its simulator stays disabled unless
+`TELEMETRY_SIMULATOR_ENABLED=true` is explicitly supplied.
+
+Rider demo mode remains the default. The backend does not implement nearby or
+rental endpoints required by the optional rider HTTP adapter. The dashboard
+continues to use fixtures. Telemetry consumers, MCP Kafka projection, demand,
+OFFLINE rules and operational proposal execution remain deferred.
+
+Run `node scripts/compose-smoke.mjs` for a fresh isolated stack with no host port
+collisions. It captures results and logs under `build/week2-smoke-*` and removes
+only its own uniquely named containers and test volumes. Existing developer
+volumes are preserved. See [Week 2 verification](docs/integration/week-2-verification.md)
+for component checks and readiness blockers.
+
 ## Safety boundary
 
-AI output is advisory. The planner may create proposals, but no proposal can
-change fleet state without explicit operator approval.
+AI output is advisory. The planner creates proposals and records human decisions;
+approval never executes actions or changes fleet state.

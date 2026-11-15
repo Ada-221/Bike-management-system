@@ -1,7 +1,7 @@
 # fleet-management-service
 
 Spring Boot service owning vehicles, zones, rentals and maintenance (Person 1).
-Contract: `api/fleet-api.yaml`. Domain rules: `docs/fleet/domain-model.md`.
+Contract: `api/fleet-api.yaml`. Domain rules: [backend domain model](../docs/backend/domain-model.md).
 
 ## Run locally (PowerShell, from the repo root)
 
@@ -16,7 +16,8 @@ credentials can be overridden with `FLEET_DB_URL`, `FLEET_DB_USER`, `FLEET_DB_PA
 
 ## Run everything in Docker instead
 
-    docker compose up -d --build
+    # First copy .env.example to .env in the repository root.
+    docker compose up -d --build --wait
 
 This builds the service image and starts Postgres, the service (port 8080) and the
 dashboard. Stop any `mvn spring-boot:run` first, because both use port 8080.

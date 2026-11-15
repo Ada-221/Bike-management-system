@@ -30,9 +30,9 @@ Snapshots containing 500 records are rejected because the backend cap prevents
 proving completeness; totals are only reported for smaller snapshots.
 
 Compose defaults to `http://fleet-management-service:8080/api/v1/` for the
-combined environment after team integration. Override `BACKEND_API_URL` with
+combined environment. Copy the root `.env.example` to `.env` before startup. Override `BACKEND_API_URL` with
 `http://host.docker.internal:8080/api/v1/` for a standalone host backend. This
-branch does not merge the backend or telemetry implementations.
+integration includes the backend and telemetry implementations; Kafka projection remains deferred.
 
 ## Check and exercise
 

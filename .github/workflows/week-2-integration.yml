@@ -1,0 +1,87 @@
+name: Week 2 integration
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  java:
+    runs-on: ubuntu-latest
+    env:
+      # Boot 3.3's docker-java default predates modern Docker's minimum API.
+      JAVA_TOOL_OPTIONS: -Dapi.version=1.44
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - run: mvn -B -f fleet-management-service/pom.xml verify
+      - run: mvn -B -f telemetry-ingestion-service/pom.xml package
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: java-test-reports
+          path: |
+            fleet-management-service/target/surefire-reports
+            fleet-management-service/target/failsafe-reports
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: operator-dashboard/package-lock.json
+      - run: npm test && npm run check
+        working-directory: ai-mcp
+      - run: npm ci
+        working-directory: operator-dashboard
+      - run: npx playwright install --with-deps chromium
+        working-directory: operator-dashboard
+      - run: npm run build && npm test
+        working-directory: operator-dashboard
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: dashboard-browser-results
+          path: operator-dashboard/test-results
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew && ./gradlew assembleDebug testDebugUnitTest -Prider.backendUrl=
+        working-directory: rider-app
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          working-directory: rider-app
+          script: ./gradlew connectedDebugAndroidTest -Prider.backendUrl=
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-reports
+          path: rider-app/app/build/reports
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/compose-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: combined-compose-evidence
+          path: build/week2-smoke-*

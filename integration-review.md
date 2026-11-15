@@ -1,5 +1,20 @@
 # Event and telemetry integration register
 
+## Combined Week 2 implementation
+
+The integration branch combines the fleet, telemetry, reconciled MCP and rider
+branches without changing their application behavior. Fleet vehicle endpoints,
+PostgreSQL migrations, telemetry publication, MCP read tools and persisted advisory
+proposals are implemented. Nearby/rental/return APIs remain unimplemented, even
+where OpenAPI or rider adapter code describes them. Rider demo mode is the
+supported default; dashboard fixtures remain the current data source.
+
+MCP Kafka projection, fleet telemetry consumers, demand, OFFLINE inference and
+operational proposal execution remain deferred. An approved proposal records a
+human decision only. See [verification](docs/integration/week-2-verification.md)
+for combined checks and delivery blockers; historical component evidence alone
+does not declare the integrated branch ready.
+
 This register separates settled integration rules from the questions that still
 need owner decisions. Settled rules supersede conflicting Week 1 draft wording.
 The three Kafka topics remain `fleet.vehicle`, `fleet.rental`, and
