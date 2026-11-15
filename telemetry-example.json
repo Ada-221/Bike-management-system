@@ -1,14 +1,13 @@
 {
-  "eventId": "evt_001",
-  "eventType": "VehicleTelemetryReceived",
+  "eventId": "evt_00000000-0000-4000-8000-000000000001",
+  "eventType": "VehicleBatteryUpdated",
   "schemaVersion": "1.0",
-  "timestamp": "2026-11-05T20:00:00Z",
-  "vehicleId": "veh_001",
-  "correlationId": "corr_001",
+  "vehicleId": "veh_0001",
+  "measuredAt": "2026-11-10T09:15:00Z",
+  "publishedAt": "2026-11-10T09:15:02Z",
+  "correlationId": "corr_0001",
   "producer": "telemetry-ingestion-service",
   "payload": {
-    "batteryPercent": 70,
-    "latitude": 45.7489,
-    "longitude": 21.2087
+    "batteryPercent": 72
   }
 }

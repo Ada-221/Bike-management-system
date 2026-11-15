@@ -43,13 +43,13 @@
     },
     "vehicle": {
       "type": "object", "additionalProperties": false,
-      "required": ["vehicleId", "areaId", "batteryPercent", "operationalStatus", "telemetryAt"],
+      "required": ["vehicleId", "areaId", "batteryPercent", "operationalStatus", "batteryMeasuredAt"],
       "properties": {
         "vehicleId": { "$ref": "#/$defs/vehicleId" },
         "areaId": { "$ref": "#/$defs/areaId" },
         "batteryPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
         "operationalStatus": { "enum": ["AVAILABLE", "IN_USE", "MAINTENANCE", "OFFLINE"] },
-        "telemetryAt": { "$ref": "#/$defs/utcTimestamp" }
+        "batteryMeasuredAt": { "$ref": "#/$defs/utcTimestamp" }
       }
     },
     "success": {

@@ -36,10 +36,10 @@
         "schemaVersion": "1.0",
         "readModelAsOf": "2026-11-04T08:00:00Z",
         "freshness": { "status": "FRESH", "ageSeconds": 12, "maxAgeSeconds": 300 },
-        "vehicles": [{ "vehicleId": "veh_0007", "areaId": "area_campus", "batteryPercent": 9, "operationalStatus": "AVAILABLE", "telemetryAt": "2026-11-04T07:59:40Z" }],
+        "vehicles": [{ "vehicleId": "veh_0007", "areaId": "area_campus", "batteryPercent": 9, "operationalStatus": "AVAILABLE", "batteryMeasuredAt": "2026-11-04T07:59:40Z" }],
         "pagination": { "hasMore": false }
       },
-      "content": [{ "type": "text", "text": "{\"schemaVersion\":\"1.0\",\"readModelAsOf\":\"2026-11-04T08:00:00Z\",\"freshness\":{\"status\":\"FRESH\",\"ageSeconds\":12,\"maxAgeSeconds\":300},\"vehicles\":[{\"vehicleId\":\"veh_0007\",\"areaId\":\"area_campus\",\"batteryPercent\":9,\"operationalStatus\":\"AVAILABLE\",\"telemetryAt\":\"2026-11-04T07:59:40Z\"}],\"pagination\":{\"hasMore\":false}}" }],
+      "content": [{ "type": "text", "text": "{\"schemaVersion\":\"1.0\",\"readModelAsOf\":\"2026-11-04T08:00:00Z\",\"freshness\":{\"status\":\"FRESH\",\"ageSeconds\":12,\"maxAgeSeconds\":300},\"vehicles\":[{\"vehicleId\":\"veh_0007\",\"areaId\":\"area_campus\",\"batteryPercent\":9,\"operationalStatus\":\"AVAILABLE\",\"batteryMeasuredAt\":\"2026-11-04T07:59:40Z\"}],\"pagination\":{\"hasMore\":false}}" }],
       "isError": false,
       "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "cebp-mcp-server", "version": "1.0.0" } }
     }

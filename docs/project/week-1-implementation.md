@@ -24,8 +24,8 @@ It is not a complete, running end-to-end system.
 - Defined the fleet service's ownership of vehicles, zones, rentals, and
   maintenance records, including fields, status models, validation rules,
   business rules, error codes, and design decisions in the
-  [domain model](domain-model.md).
-- Added an entity relationship diagram in [ER diagram](er-diagram.md).
+  [domain model](../backend/domain-model.md).
+- Added an entity relationship diagram in [ER diagram](../backend/er-diagram.md).
 - Drafted an OpenAPI 3.0.3 contract in [`api/fleet-api.yaml`](../../api/fleet-api.yaml)
   for vehicle and zone queries, rentals, maintenance, fleet status, SSE, and
   proposal/planner endpoints. Proposal and planner endpoints are owned by the
@@ -34,7 +34,7 @@ It is not a complete, running end-to-end system.
   with constraints and indexes for fleet entities, rental uniqueness and
   idempotency, maintenance history, and processed event IDs.
 - Documented fleet events published and consumed, with example payloads and
-  consumer handling guidance, in [events-owned.md](events-owned.md).
+  consumer handling guidance, in [events-owned.md](../backend/events-owned.md).
 
 ## Events, telemetry, and simulator design
 

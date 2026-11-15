@@ -1,0 +1,38 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1   # every endpoint lives under /api/v1 (matches fleet-api.yaml)
+
+spring:
+  application:
+    name: fleet-management-service
+  datasource:
+    # Defaults match the Postgres service in compose.yaml. Override with environment variables.
+    url: ${FLEET_DB_URL:jdbc:postgresql://localhost:5432/fleet}
+    username: ${FLEET_DB_USER:fleet}
+    password: ${FLEET_DB_PASSWORD:fleet}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate      # Flyway owns the schema; Hibernate only checks it matches
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+logging:
+  pattern:
+    level: "%5p [%X{correlationId:-}]"   # show the correlation ID in every log line
+
+# Business constants (domain-model.md section 6). Change here, no code edits needed.
+fleet:
+  min-rentable-battery-percent: 20
+  low-battery-resolve-percent: 50
+  nearby-default-radius-meters: 1000
+  nearby-max-radius-meters: 5000
+  list-default-limit: 100
+  list-max-limit: 500
+  sse-heartbeat-seconds: 15

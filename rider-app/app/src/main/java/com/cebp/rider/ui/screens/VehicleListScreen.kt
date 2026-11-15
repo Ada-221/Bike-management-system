@@ -19,12 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.cebp.rider.R
+import com.cebp.rider.data.RiderLocation
 import com.cebp.rider.data.RiderRepository
 import com.cebp.rider.model.Rental
 import com.cebp.rider.model.Vehicle
 import com.cebp.rider.ui.components.CenteredMessage
-import com.cebp.rider.ui.components.LoadState
-import com.cebp.rider.ui.components.LoadingIndicator
+import com.cebp.rider.ui.components.LoadContent
 import com.cebp.rider.ui.components.RiderScaffold
 import com.cebp.rider.ui.components.labelRes
 import com.cebp.rider.ui.components.rememberLoad
@@ -32,6 +32,8 @@ import com.cebp.rider.ui.components.rememberLoad
 private data class VehicleListContent(
     val vehicles: List<Vehicle>,
     val activeRental: Rental?,
+    /** Label of the vehicle in [activeRental], falling back to its ID. */
+    val activeVehicleLabel: String?,
 )
 
 @Composable
@@ -40,15 +42,21 @@ fun VehicleListRoute(
     onVehicleClick: (vehicleId: String) -> Unit,
     onResumeRental: (rentalId: String) -> Unit,
 ) {
-    val state = rememberLoad(repository) {
-        VehicleListContent(repository.getAvailableVehicles(), repository.getActiveRental())
+    val load = rememberLoad(repository) {
+        val activeRental = repository.getActiveRental()
+        VehicleListContent(
+            vehicles = repository.getNearbyVehicles(RiderLocation.current),
+            activeRental = activeRental,
+            activeVehicleLabel = activeRental?.let {
+                repository.getVehicle(it.vehicleId)?.label ?: it.vehicleId
+            },
+        )
     }
 
     RiderScaffold(title = stringResource(R.string.vehicle_list_title)) { padding ->
-        when (state) {
-            LoadState.Loading -> LoadingIndicator(padding)
-            is LoadState.Ready -> VehicleList(
-                content = state.value,
+        LoadContent(load, padding) { content ->
+            VehicleList(
+                content = content,
                 padding = padding,
                 onVehicleClick = onVehicleClick,
                 onResumeRental = onResumeRental,
@@ -66,7 +74,10 @@ private fun VehicleList(
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(padding)) {
         content.activeRental?.let { rental ->
-            ActiveRentalBanner(rental = rental, onResumeRental = onResumeRental)
+            ActiveRentalBanner(
+                vehicleLabel = content.activeVehicleLabel ?: rental.vehicleId,
+                onResume = { onResumeRental(rental.id) },
+            )
         }
         if (content.vehicles.isEmpty()) {
             CenteredMessage(
@@ -84,17 +95,17 @@ private fun VehicleList(
 }
 
 @Composable
-private fun ActiveRentalBanner(rental: Rental, onResumeRental: (rentalId: String) -> Unit) {
+private fun ActiveRentalBanner(vehicleLabel: String, onResume: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = stringResource(R.string.rental_in_progress, rental.vehicleId),
+                text = stringResource(R.string.rental_in_progress, vehicleLabel),
                 style = MaterialTheme.typography.titleMedium,
             )
-            Button(onClick = { onResumeRental(rental.id) }) {
+            Button(onClick = onResume) {
                 Text(stringResource(R.string.rental_resume))
             }
         }
@@ -103,11 +114,16 @@ private fun ActiveRentalBanner(rental: Rental, onResumeRental: (rentalId: String
 
 @Composable
 private fun VehicleRow(vehicle: Vehicle, onClick: () -> Unit) {
+    val type = stringResource(vehicle.type.labelRes)
     ListItem(
         modifier = Modifier.clickable(onClick = onClick),
-        headlineContent = { Text(vehicle.id) },
+        headlineContent = { Text(vehicle.label) },
         supportingContent = {
-            Text("${stringResource(vehicle.type.labelRes)} · ${vehicle.area}")
+            Text(
+                vehicle.distanceMeters
+                    ?.let { stringResource(R.string.vehicle_list_row, type, it) }
+                    ?: type,
+            )
         },
         trailingContent = {
             Text(stringResource(R.string.vehicle_battery, vehicle.batteryPercent))

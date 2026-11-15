@@ -1,82 +1,32 @@
-# Kafka Topics — Draft
+# Kafka topics and routing
 
-Status: Proposed mapping for team review.
-Topic names and event routing are not finalized.
+The project keeps its three existing domain topics. Do not add `fleet.events`.
+Telemetry battery and location updates are separate events on `fleet.vehicle`.
 
-## vehicle.telemetry
-Normalized vehicle measurements.
+| Topic | Settled routing | Event details still requiring owner agreement |
+|---|---|---|
+| `fleet.vehicle` | `VehicleBatteryUpdated` and `VehicleLocationUpdated`, keyed by the Kafka record key `vehicleId`. | Complete producer/consumer matrix, schema version rollout, retention, retry, and dead-letter policy. `VehicleRegistered` owner/routing remains to be confirmed. |
+| `fleet.rental` | Existing rental domain topic. | Exact event routing and producer/consumer ownership. Demand may be derived from rentals or published separately; `DemandRecorded` ownership and payload remain open. |
+| `fleet.maintenance` | Existing maintenance domain topic. | Exact event routing and producer/consumer ownership, including unsettled fault description rules. |
 
-Proposed events:
-- VehicleTelemetryReceived
-- VehicleLocationUpdated
-- VehicleBatteryUpdated
-- VehicleFaultReported
+## Settled telemetry envelope
 
-## fleet.events
-Vehicle inventory, rental, maintenance, and demand events.
+Battery and location messages carry top-level `eventId`, `eventType`,
+`schemaVersion`, `vehicleId`, `measuredAt`, `publishedAt`, `correlationId`,
+`producer`, and `payload`. `measuredAt` and `publishedAt` are distinct UTC
+timestamps. Each separate event uses its own distinct `evt_` ID; IDs are
+preserved for retries. The producer is `telemetry-ingestion-service`.
 
-Proposed events:
-- VehicleRegistered
-- RentalStarted
-- RentalEnded
-- VehicleMaintenanceChanged
-- DemandRecorded
+The Kafka record key is `vehicleId`, matching the event field. Kafka ordering
+alone does not resolve delayed measurements: consumers track battery and
+location freshness independently. Equal-measurement-time behavior remains open.
+See [telemetry contract](telemetry-contract.md) and the
+[integration register](integration-review.md).
 
-## rebalancing.proposals
-AI proposal lifecycle events.
+## Still open
 
-Proposed events:
-- RebalancingProposalCreated
-- RebalancingProposalApproved
-- RebalancingProposalRejected
-
-## Decisions needed
-- Confirm topic names and event routing with affected owners.
-- Decide whether each measurement produces one combined telemetry
-  event, separate update events, or both.
-- Define message keys and ordering rules.
-- Define retention, retry, and dead-letter handling.
-- Assign the producer and consumers for each event.
-
-## Proposed telemetry message key
-
-For vehicle.telemetry, use vehicleId as the Kafka message key.
-
-The key must match the vehicleId inside the event.
-It is Kafka record metadata, separate from the JSON message.
-
-With a stable partition count and consistent partitioning,
-events for the same vehicle are routed to the same partition.
-
-Kafka ordering does not guarantee measurement-time ordering.
-Consumers must still handle delayed measurements and duplicates.
-
-This choice requires review by the affected service owners.
-
-## Proposed telemetry producers and consumers
-
-Events:
-- VehicleTelemetryReceived
-- VehicleFaultReported
-
-Proposed producer:
-- telemetry-ingestion-service validates simulator input
-  and publishes normalized events.
-
-Proposed consumers:
-- fleet-management-service applies agreed operational rules.
-- mcp-server updates its independent read model.
-
-Requires team agreement:
-- Confirm direct consumption by both services.
-- Decide whether separate location and battery events are
-  published, by which service, and how double application
-  of the same measurement is prevented.
-
-## Comparison with the reviewed Backend draft
-
-Backend currently publishes VehicleRegistered on fleet.vehicle, rentals on fleet.rental, and VehicleMaintenanceChanged on fleet.maintenance. This differs from the fleet.events proposal above; these are alternatives, not instructions to publish twice.
-
-Backend currently lists VehicleBatteryUpdated, VehicleLocationUpdated and VehicleFaultReported as telemetry inputs. It does not list VehicleTelemetryReceived. Confirm the final routing and payloads before implementing producers or consumers. The separate battery/location event schemas are pending that decision.
-
-DemandRecorded ownership, payload and routing remain open. Retention, retry and dead-letter settings also remain open; none are configured by this document.
+- Kafka retention, retry, dead-letter handling, and partition-count policy.
+- Producer and consumer ownership for every event outside the settled telemetry
+  envelope.
+- Demand event ownership, payload, and routing.
+- Fault event requiredness and handling.

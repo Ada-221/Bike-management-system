@@ -1,5 +1,10 @@
 # Operator dashboard
 
+Week 2 integration retains fixture data; no live fleet or proposal API is wired.
+Playwright uses its installed Chromium by default (`npx playwright install chromium`).
+For local Edge, set `PLAYWRIGHT_CHANNEL=msedge` (PowerShell:
+`$env:PLAYWRIGHT_CHANNEL='msedge'`) before `npm test`. CI installs Chromium.
+
 Person 3's Week 1 React/TypeScript skeleton for the CEBP operator dashboard.
 This is a local academic demonstrator with fixed synthetic data, not a connected
 fleet application. React and TypeScript are the implementation-plan baseline;

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101a2b" />
+    <title>AI/MCP schema explorer</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="#">
+          <span class="brand-mark">⌘</span>
+          <span><strong>Fleet contracts</strong><small>AI / MCP · v1</small></span>
+        </a>
+        <div class="nav-label">SCHEMAS <span id="schema-count">…</span></div>
+        <nav id="schema-nav" aria-label="Schemas"></nav>
+        <div class="sidebar-foot"><span class="status-dot"></span> Contract files loaded from Docker volume</div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div class="breadcrumb">Contracts <span>/</span> <strong>Schema explorer</strong></div>
+          <a class="dashboard-link" href="http://localhost:8081">Operator dashboard <span>↗</span></a>
+        </header>
+        <section class="intro">
+          <div class="eyebrow"><span></span> CONTRACT REFERENCE</div>
+          <h1>AI / MCP schemas</h1>
+          <p>Browse the tool payloads and proposal contract. Select a schema to inspect its fields, constraints, and source JSON. Week 2 availability returns null for availableSince until backend status-since data exists.</p>
+        </section>
+        <div id="message" class="message" role="status">Loading contract manifest…</div>
+        <section id="content" class="content" hidden>
+          <div class="schema-heading">
+            <div><div id="schema-kind" class="eyebrow"></div><h2 id="schema-title"></h2><p id="schema-file"></p><p id="schema-description" class="schema-description"></p></div>
+            <div class="schema-actions"><span id="root-type" class="pill"></span><button id="copy-button" class="copy-button" type="button">Copy JSON</button></div>
+          </div>
+          <div class="schema-meta" id="schema-meta"></div>
+          <div class="panel fields-panel">
+            <div class="panel-heading"><div><span class="panel-icon">≡</span><strong>Schema fields</strong></div><span id="field-count" class="muted"></span></div>
+            <div id="fields" class="fields"></div>
+          </div>
+          <details class="panel raw-panel">
+            <summary><span><span class="panel-icon">{ }</span><strong>Raw JSON Schema</strong></span><span class="muted">View full definition</span></summary>
+            <pre><code id="raw-json"></code></pre>
+          </details>
+          <footer>JSON Schema Draft 2020-12 <span>·</span> Source: contracts/ai-mcp/v1/schemas</footer>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
