@@ -1,7 +1,44 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: fleet
+      POSTGRES_USER: fleet
+      # Local development default only. Override with POSTGRES_PASSWORD in a .env file.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fleet}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fleet -d fleet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  fleet-management-service:
+    build:
+      context: ./fleet-management-service
+    environment:
+      FLEET_DB_URL: jdbc:postgresql://postgres:5432/fleet
+      FLEET_DB_USER: fleet
+      FLEET_DB_PASSWORD: ${POSTGRES_PASSWORD:-fleet}
+      # "dev" also loads the demo zones. Remove this line for an empty zones table.
+      SPRING_PROFILES_ACTIVE: dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   operator-dashboard:
     build:
       context: ./operator-dashboard
     ports:
       - "8081:80"
     restart: unless-stopped
+
+volumes:
+  postgres-data:
