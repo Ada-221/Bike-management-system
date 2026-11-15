@@ -1,0 +1,39 @@
+name: AI MCP service
+
+on:
+  push:
+    paths:
+      - "ai-mcp/**"
+      - "contracts/ai-mcp/v1/**"
+      - "integration-review.md"
+      - "kafka-topics.md"
+      - "telemetry-contract.md"
+      - "telemetry.schema.json"
+      - "telemetry-example.json"
+      - "location-example.json"
+      - ".github/workflows/ai-mcp.yml"
+  pull_request:
+    paths:
+      - "ai-mcp/**"
+      - "contracts/ai-mcp/v1/**"
+      - "integration-review.md"
+      - "kafka-topics.md"
+      - "telemetry-contract.md"
+      - "telemetry.schema.json"
+      - "telemetry-example.json"
+      - "location-example.json"
+      - ".github/workflows/ai-mcp.yml"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+        working-directory: ai-mcp
+      - run: npm run check
+        working-directory: ai-mcp
+      - run: docker build -f ai-mcp/Dockerfile -t cebp-ai-mcp:ci .

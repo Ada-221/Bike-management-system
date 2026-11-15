@@ -1,36 +1,86 @@
-# Event / Telemetry integration review — Draft
+# Event and telemetry integration register
 
-This file is the current register for unresolved cross-component integration
-decisions. Items remain pending until affected owners or the project lead/team
-record an outcome and rationale here. The project-wide map and decision process
-are in [architecture and agent conventions](docs/architecture-and-agent-conventions.md).
+This register separates settled integration rules from the questions that still
+need owner decisions. Settled rules supersede conflicting Week 1 draft wording.
+The three Kafka topics remain `fleet.vehicle`, `fleet.rental`, and
+`fleet.maintenance`; do not introduce `fleet.events`.
 
-Based on the teammate drafts reviewed on 2026-11-08. This is a decision list, not team approval. Existing draft examples remain usable for local schema checks only.
+## Settled decisions
 
-| Item | Current telemetry draft | Reviewed teammate contract | Required decision |
-|---|---|---|---|
-| Vehicle ID | veh_001 and prefixed pattern | Backend UUID; AI/MCP prefixed IDs | Backend + AI/MCP + telemetry: choose shared IDs or an explicit mapping; do not invent conversion rules. |
-| Event ID | evt_001; non-empty string | Backend processed_events.event_id is UUID | Backend + telemetry: choose UUID event IDs or change storage; update examples and replay IDs together. |
-| Telemetry events | Combined VehicleTelemetryReceived | Backend consumes separate battery/location updates | Backend + telemetry + MCP: decide which events are emitted and consumed; avoid applying one measurement twice. |
-| Envelope and measurement time | vehicleId and timestamp at top level | Backend lists vehicleId and measuredAt in payload requirements | Confirm complete wire examples. Clarify measurement time versus publication time before renaming fields. |
-| Fault description | Required non-empty string | Backend says optional | Agree requiredness and update schema plus examples together. |
-| Producer | telemetry-ingestion-service | Backend says telemetry-ingestion | Agree one producer identifier. |
-| Fleet topics | fleet.events proposal | fleet.vehicle, fleet.rental, fleet.maintenance | Backend + telemetry + MCP: choose routing. |
-| Read-model status / area | Mapping pending | Backend RENTED / MAINTENANCE_REQUIRED and zone UUID; MCP IN_USE / MAINTENANCE / OFFLINE and area prefixes | Backend + MCP: define explicit mappings and OFFLINE semantics. |
-| Freshness | Reject older measurements | Backend uses one last_telemetry_at for separate fields | Backend + telemetry: use an agreed per-field or combined-update strategy; specify equal-time handling. |
-| Approval effects | No operational implementation here | Backend applies actions on approval; AI proposal contract says advisory and no direct execution even after approval | Backend + AI/planner: resolve execution boundary; telemetry must not decide it. |
+| Area | Decision | Implementation notes |
+|---|---|---|
+| Kafka topics | Keep `fleet.vehicle`, `fleet.rental`, and `fleet.maintenance`. | Route each event to its existing domain topic. No `fleet.events` topic. |
+| Telemetry events | Publish separate `VehicleBatteryUpdated` and `VehicleLocationUpdated` events to `fleet.vehicle`, keyed by the Kafka record key `vehicleId`. | Each event represents one measurement. Do not also publish a combined update for the same reading. |
+| Event envelope | Both event types carry top-level `eventId`, `eventType`, `schemaVersion`, `vehicleId`, `measuredAt`, `publishedAt`, `correlationId`, `producer`, and `payload`. | `measuredAt` is the sensor measurement time; `publishedAt` is the distinct event publication time. Both timestamps are UTC. |
+| Telemetry identifiers | Event IDs are unique, non-empty strings with an event-type prefix (`battery_…` or `location_…`). Vehicle IDs in telemetry are `veh_…` identifiers. | Preserve IDs through retries; event ID is unique per event, not shared by the paired battery and location measurements. |
+| Telemetry producer | Use `telemetry-ingestion-service` as the producer ID. | Applies to normalized battery and location events. |
+| Entity ID boundary | Backend/API vehicle identifiers and cross-service vehicle IDs use a stable `veh_…` identifier; MCP area IDs use `area_…`. Backend zones remain UUIDs behind the area adapter. | The database may retain an internal UUID primary key only if it maintains an explicit stable mapping to the public vehicle ID. Update UUID-only assumptions in `api/fleet-api.yaml` vehicle path/`id` schemas, backend DTOs, fixtures, and MCP joins. Never parse, synthesize, or infer a UUID from a prefixed ID. |
+| Backend statuses | Keep backend operational values `AVAILABLE`, `RENTED`, and `MAINTENANCE_REQUIRED`. | The MCP adapter maps `RENTED` → `IN_USE` and `MAINTENANCE_REQUIRED` → `MAINTENANCE`; `AVAILABLE` stays `AVAILABLE`. `OFFLINE` has no agreed producer rule yet and must not be inferred from a missing record. |
+| Area lookup | MCP area codes map through explicit configuration/data to backend zone UUIDs, and the resolved UUID must match a zone returned by the backend. | Unknown or ambiguous mappings fail clearly. Do not derive a UUID from the area code or guess by display name. |
+| Telemetry freshness | Battery and location are independent measurements with independent freshness. | A newer battery measurement does not suppress an older-but-current location measurement, or vice versa. Each projection field tracks its own `measuredAt`; exact equal-time handling remains open. |
+| Authoritative state | The fleet backend is authoritative for operational vehicle and zone state. MCP tools normally query backend-stored state through its read API. | The MCP service may persist its own read model, but must not treat an advisory proposal or cached projection as authoritative operational state. |
+| MCP status and freshness | MCP translates backend status values at the adapter boundary and carries battery and location measurement timestamps independently (`batteryMeasuredAt`, `locationMeasuredAt`). | Do not change backend enum values to match MCP vocabulary. Replace single `lastTelemetryAt`/`telemetryAt` assumptions in the backend entity/API, DB, and MCP schemas with per-field measurement timestamps. |
+| Proposal safety | Planner output is advisory before and after approval. Approval records a human decision; it does not itself execute an action or mutate fleet state. | Any future operational command requires a separately defined and authorized interface. Telemetry is not part of an approval decision. |
 
-## Applied in this review
-- Consistent JSON formatting and final newlines.
-- faultCode maximum length 50 to match the reviewed database column.
-- Removed the implication that Backend and MCP IDs already agree.
-- Fault scenario now references the existing example and schema.
-- Added boundary and integration test specifications.
+### Battery event example
 
-## Still pending before integration
-- Final battery/location schemas after event shape agreement.
-- Demand event ownership and payload.
-- Kafka retention, retry and dead-letter choices.
-- Producer/consumer contract agreement and actual integration tests.
+```json
+{
+  "eventId": "battery_evt_0001",
+  "eventType": "VehicleBatteryUpdated",
+  "schemaVersion": "1.0",
+  "vehicleId": "veh_0001",
+  "measuredAt": "2026-11-10T09:15:00Z",
+  "publishedAt": "2026-11-10T09:15:02Z",
+  "correlationId": "corr_0001",
+  "producer": "telemetry-ingestion-service",
+  "payload": { "batteryPercent": 72 }
+}
+```
 
-Frontend uses the Backend model subset. Mobile explicitly uses provisional fake models. Their screen models do not add new telemetry event requirements.
+### Location event example
+
+```json
+{
+  "eventId": "location_evt_0001",
+  "eventType": "VehicleLocationUpdated",
+  "schemaVersion": "1.0",
+  "vehicleId": "veh_0001",
+  "measuredAt": "2026-11-10T09:15:00Z",
+  "publishedAt": "2026-11-10T09:15:03Z",
+  "correlationId": "corr_0001",
+  "producer": "telemetry-ingestion-service",
+  "payload": { "latitude": 45.7489, "longitude": 21.2087 }
+}
+```
+
+## Open questions
+
+| Question | Owners | Why it remains open |
+|---|---|---|
+| What timeout and evidence should cause a vehicle to be represented as `OFFLINE` in MCP? | Backend, telemetry, MCP | No timeout or last-seen policy has been agreed. |
+| Is a fault description required, optional, or conditionally required, and what length/blank-value rules apply? | Backend, telemetry | Draft schema and database/API drafts disagree. |
+| What are Kafka retention, retry, and dead-letter policies? | Telemetry, backend, MCP | No operational policy is settled. |
+| Who owns and publishes demand observations, and what is their event payload/routing? | Telemetry, MCP, backend | `DemandRecorded` producer and whether demand is derived from rentals are unsettled. |
+| Which service produces each non-telemetry event, and which services consume it? | Backend, telemetry, MCP | Confirm the complete producer/consumer matrix before wiring consumers. |
+| What are the exact schemas for each finalized event, including equal-`measuredAt` ordering behavior? | Backend, telemetry, MCP | This register settles the envelope and two telemetry event types, but not every payload or tie-break rule. |
+| How will UUID-to-prefixed vehicle and zone mappings be provisioned and kept stable across environments? | Backend, MCP | The mapping is required, but the shared registry/API/storage mechanism is not selected. |
+| Which backend field or event establishes `availableSince` for the MCP availability result? | Backend, MCP | The MCP contract requires it, but the backend vehicle draft does not define a status-since timestamp. The MCP adapter will not substitute vehicle creation or telemetry time. |
+| Are proposal lifecycle events retained, and which component owns their eventual publication? | Backend, MCP, AI/planner | Proposal approval does not execute fleet changes; future event ownership is not finalized. |
+
+## Person 5 — Week 2 MCP, AI, and QA plan
+
+| Work item | Week 2 scope |
+|---|---|
+| MCP server | Implement the v1 stateless Streamable HTTP skeleton, health endpoint, tool discovery/call structure, and contract/schema handling. |
+| Read path | Add read-model persistence foundations and an initial adapter path that normally queries backend-stored state. Keep backend status conversion and explicit area-code-to-zone-UUID resolution in the MCP adapter; never infer zone UUIDs. |
+| Planner and proposals | Persist proposal records and implement a deterministic mock planner that emits schema-valid advisory proposals. Approval records the decision only and cannot execute actions or change fleet state. |
+| QA | Add focused checks for MCP protocol and schema handling, backend status and area mappings, proposal validation, and approval safety. Defer behavior that depends on the open questions above. |
+| Build and developer workflow | Add the Person 5 service and its checks to the Week 2 build/CI workflow. Document local startup plus one MCP query and mock proposal run. CI must not require an external LLM. |
+
+## Deferred until decisions close
+
+- Kafka consumer behavior for unsettled producer/consumer routes, retention, retry,
+  dead-letter handling, demand ownership, and OFFLINE semantics.
+- Fault description validation until requiredness is agreed.
+- Any approval-triggered operational action or telemetry-based approval rule.

@@ -1,68 +1,62 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "VehicleTelemetryReceived — Draft",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "eventId",
-    "eventType",
-    "schemaVersion",
-    "timestamp",
-    "vehicleId",
-    "correlationId",
-    "producer",
-    "payload"
+  "title": "Battery or location update event",
+  "oneOf": [
+    { "$ref": "#/$defs/batteryUpdate" },
+    { "$ref": "#/$defs/locationUpdate" }
   ],
-  "properties": {
-    "eventId": {
-      "type": "string",
-      "minLength": 1
-    },
-    "eventType": {
-      "const": "VehicleTelemetryReceived"
-    },
-    "schemaVersion": {
-      "const": "1.0"
-    },
-    "timestamp": {
+  "$defs": {
+    "utcTimestamp": {
       "type": "string",
       "format": "date-time",
       "pattern": "Z$"
     },
     "vehicleId": {
       "type": "string",
-    "pattern": "^veh_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"    },
-    "correlationId": {
-      "type": "string",
-      "minLength": 1
+      "pattern": "^veh_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"
     },
-    "producer": {
-      "type": "string",
-      "minLength": 1
-    },
-    "payload": {
+    "batteryUpdate": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "batteryPercent",
-        "latitude",
-        "longitude"
-      ],
+      "required": ["eventId", "eventType", "schemaVersion", "vehicleId", "measuredAt", "publishedAt", "correlationId", "producer", "payload"],
       "properties": {
-        "batteryPercent": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 100
-        },
-        "latitude": {
-          "type": "number",
-          "minimum": -90,
-          "maximum": 90
-        },
-        "longitude": {
-          "type": "number",
-          "minimum": -180,
-          "maximum": 180
+        "eventId": { "type": "string", "pattern": "^battery_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+        "eventType": { "const": "VehicleBatteryUpdated" },
+        "schemaVersion": { "const": "1.0" },
+        "vehicleId": { "$ref": "#/$defs/vehicleId" },
+        "measuredAt": { "$ref": "#/$defs/utcTimestamp" },
+        "publishedAt": { "$ref": "#/$defs/utcTimestamp" },
+        "correlationId": { "type": "string", "minLength": 1 },
+        "producer": { "const": "telemetry-ingestion-service" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["batteryPercent"],
+          "properties": { "batteryPercent": { "type": "integer", "minimum": 0, "maximum": 100 } }
+        }
+      }
+    },
+    "locationUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "schemaVersion", "vehicleId", "measuredAt", "publishedAt", "correlationId", "producer", "payload"],
+      "properties": {
+        "eventId": { "type": "string", "pattern": "^location_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+        "eventType": { "const": "VehicleLocationUpdated" },
+        "schemaVersion": { "const": "1.0" },
+        "vehicleId": { "$ref": "#/$defs/vehicleId" },
+        "measuredAt": { "$ref": "#/$defs/utcTimestamp" },
+        "publishedAt": { "$ref": "#/$defs/utcTimestamp" },
+        "correlationId": { "type": "string", "minLength": 1 },
+        "producer": { "const": "telemetry-ingestion-service" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["latitude", "longitude"],
+          "properties": {
+            "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+            "longitude": { "type": "number", "minimum": -180, "maximum": 180 }
+          }
         }
       }
     }
