@@ -85,14 +85,15 @@ default; dashboard fixtures remain its data source. No fleet telemetry consumer,
 MCP Kafka projection, demand, OFFLINE inference or operational proposal execution
 was introduced. Backend application code and applied migrations are unchanged.
 
-GitHub CLI is unavailable and a noninteractive credential lookup did not provide
-an authenticated GitHub API credential. The approved push was attempted with
-`git push --set-upstream origin integration/week-2` and failed because Git could
-not read a GitHub username with prompts disabled. The branch is committed locally
-but **not pushed**, and no PR was created. Hosted CI and GitHub mergeability cannot
-be claimed verified. GitHub authentication is required to finish delivery.
+The branch was successfully pushed with
+`git push --set-upstream origin integration/week-2` on retry and now tracks
+`origin/integration/week-2`. Main remains unchanged. GitHub CLI is unavailable,
+and a subsequent noninteractive credential lookup still did not provide an
+authenticated GitHub API credential. No PR was created automatically. Hosted CI
+and GitHub mergeability cannot be claimed verified; API authentication remains
+required to finish automated PR delivery.
 
-After signing in, push the branch and use this
+Use this
 [PR creation link](https://github.com/Ada-221/Bike-management-system/compare/main...integration/week-2?expand=1)
 with the prepared [PR description](week-2-pr.md). Keep the PR draft until Android
 and hosted checks pass. Fetch main again, merge it into the integration branch if
