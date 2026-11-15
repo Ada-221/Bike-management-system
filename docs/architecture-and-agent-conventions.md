@@ -15,7 +15,7 @@ it does not imply that a complete end-to-end service exists.
 
 | Component | Responsibility and owner | Status in this repository | Relationships and detail |
 |---|---|---|---|
-| Fleet management service | Owns vehicles, zones, rentals, maintenance, REST APIs and operational state. Person 1 — Backend/Fleet Lead. | **Planned, not implemented.** Domain model, OpenAPI draft, SQL schema and event ownership documents exist. | Intended to serve rider and dashboard clients, persist in PostgreSQL, and publish/consume Kafka events. See [domain model](project/domain-model.md), [fleet API draft](../api/fleet-api.yaml), [database schema draft](../db/schema.sql), and [fleet events](project/events-owned.md). |
+| Fleet management service | Owns vehicles, zones, rentals, maintenance, REST APIs and operational state. Person 1 — Backend/Fleet Lead. | **Planned, not implemented.** Domain model, OpenAPI draft, SQL schema and event ownership documents exist. | Intended to serve rider and dashboard clients, persist in PostgreSQL, and publish/consume Kafka events. See [domain model](backend/domain-model.md), [fleet API draft](../api/fleet-api.yaml), [database schema draft](../db/schema.sql), and [fleet events](backend/events-owned.md). |
 | Telemetry ingestion and vehicle simulator | Person 2 — Event/Telemetry Lead. Validate synthetic measurements, publish normalized telemetry, and provide reproducible scenarios. | **Planned, not implemented.** Schemas, examples, topic proposals and scenario specifications exist. | Intended to publish Kafka events consumed by fleet management and the MCP read model, subject to the pending integration decisions. See [telemetry contract](../telemetry-contract.md), [Kafka topic proposal](../kafka-topics.md), [simulator scenarios](../simulator-scenarios.md), and [fault schema](../fault.schema.json). |
 | Operator dashboard | Person 3 — Frontend Lead. Show fleet state and support human review of proposals. | **Partially implemented.** A React/TypeScript client prototype with local navigation and synthetic fixtures is present. It has no fleet API, SSE, live map, or operational proposal integration; proposal controls are disabled. | Intended to read documented fleet APIs and SSE, and to show AI proposals for human decisions. See [frontend handoff](frontend/week-1.md) and [dashboard README](../operator-dashboard/README.md). |
 | Rider Android app | Person 4 — Mobile Lead. Vehicle discovery, rental and return user flows. | **Partially implemented.** A Kotlin/Compose skeleton uses an in-memory fake repository and synthetic data; it has no backend or persistent integration. | Intended to call fleet REST APIs for discovery, rental and return. See [rider app README](../rider-app/README.md). |
@@ -95,7 +95,7 @@ The register is the current place to record resolution and rationale.
   events.
 - Kafka retention, retry, and dead-letter handling.
 - Additional API or UI integration needs raised by the
-  [domain-model open questions](project/domain-model.md), including nearby
+  [domain-model open questions](backend/domain-model.md), including nearby
   vehicle filters and dashboard SSE event types.
 - Proposal integration choices also identified in the
   [frontend handoff](frontend/week-1.md), including proposal IDs/states, action

@@ -8,7 +8,7 @@ info:
 
     ## Conventions
     - Base path is `/api/v1`. JSON everywhere except the SSE stream.
-    - All IDs are UUIDs. All timestamps are ISO-8601 in **UTC** (e.g. `2026-11-09T08:30:00Z`).
+    - All IDs are prefixed strings (`veh_001`, `zone_001`, `rnt_001`, `mnt_001`, `evt_001`). All timestamps are ISO-8601 in **UTC** (e.g. `2026-11-09T08:30:00Z`).
     - Clients may send an `X-Correlation-Id` header on any request. The server echoes it back
       (or generates one) and includes it in error bodies and logs, which helps debugging
       across services.
@@ -29,8 +29,6 @@ info:
     ## Mock server for teammates
     `npx @stoplight/prism-cli mock api/fleet-api.yaml` serves fake responses built from the
     examples in this file.
-  contact:
-    name: Person 1 (Backend/Fleet Lead)
 servers:
   - url: http://localhost:8080/api/v1
     description: fleet-management-service (local Docker Compose)
@@ -102,8 +100,7 @@ paths:
         - name: zoneId
           in: query
           schema:
-            type: string
-            format: uuid
+            $ref: '#/components/schemas/ZoneId'
         - name: maxBattery
           in: query
           description: Only vehicles with battery at or below this value (low-battery view).
@@ -377,8 +374,7 @@ paths:
         - name: vehicleId
           in: query
           schema:
-            type: string
-            format: uuid
+            $ref: '#/components/schemas/VehicleId'
         - name: status
           in: query
           schema:
@@ -456,8 +452,7 @@ paths:
         - name: vehicleId
           in: query
           schema:
-            type: string
-            format: uuid
+            $ref: '#/components/schemas/VehicleId'
         - name: reason
           in: query
           schema:
@@ -481,8 +476,7 @@ paths:
         in: path
         required: true
         schema:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/MaintenanceId'
     patch:
       tags: [Maintenance]
       operationId: updateMaintenance
@@ -560,7 +554,7 @@ paths:
               example: |
                 id: 42
                 event: vehicle.updated
-                data: {"id":"b0000000-0000-0000-0000-000000000001","label":"EB-001","type":"E_BIKE","status":"RENTED","batteryPercent":91,"latitude":48.2104,"longitude":16.3601,"zoneId":"a0000000-0000-0000-0000-000000000001","rentable":false,"lastTelemetryAt":"2026-11-09T08:30:05Z","createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-09T08:30:05Z"}
+                data: {"id":"veh_001","label":"EB-001","type":"E_BIKE","status":"RENTED","batteryPercent":91,"latitude":48.2104,"longitude":16.3601,"zoneId":"zone_001","rentable":false,"lastBatteryAt":"2026-11-09T08:30:05Z","lastLocationAt":"2026-11-09T08:30:05Z","lastTelemetryAt":"2026-11-09T08:30:05Z","createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-09T08:30:05Z"}
 
                 id: 43
                 event: heartbeat
@@ -722,8 +716,7 @@ paths:
           in: path
           required: true
           schema:
-            type: string
-            format: uuid
+            $ref: '#/components/schemas/PlannerRunId'
       responses:
         '200':
           description: The run
@@ -742,24 +735,19 @@ components:
       in: path
       required: true
       schema:
-        type: string
-        format: uuid
-      example: b0000000-0000-0000-0000-000000000001
+        $ref: '#/components/schemas/VehicleId'
     RentalId:
       name: rentalId
       in: path
       required: true
       schema:
-        type: string
-        format: uuid
-      example: c0000000-0000-0000-0000-000000000001
+        $ref: '#/components/schemas/RentalId'
     ProposalId:
       name: proposalId
       in: path
       required: true
       schema:
-        type: string
-        format: uuid
+        $ref: '#/components/schemas/ProposalId'
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -804,12 +792,36 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             code: NOT_FOUND
-            message: Vehicle b0000000-0000-0000-0000-0000000000ff not found.
+            message: Vehicle veh_999 not found.
             timestamp: '2026-11-09T08:30:00Z'
             correlationId: 7f3c1d2e-9a41-4c55-8d0b-1f2e3a4b5c6d
 
   # -------------------------------------------------------------- Schemas
   schemas:
+    VehicleId:
+      type: string
+      pattern: '^veh_[A-Za-z0-9_-]+$'
+      example: veh_001
+    ZoneId:
+      type: string
+      pattern: '^zone_[A-Za-z0-9_-]+$'
+      example: zone_001
+    RentalId:
+      type: string
+      pattern: '^rnt_[A-Za-z0-9_-]+$'
+      example: rnt_001
+    MaintenanceId:
+      type: string
+      pattern: '^mnt_[A-Za-z0-9_-]+$'
+      example: mnt_001
+    ProposalId:
+      type: string
+      pattern: '^prop_[A-Za-z0-9_-]+$'
+      example: prop_001
+    PlannerRunId:
+      type: string
+      pattern: '^run_[A-Za-z0-9_-]+$'
+      example: run_001
     Error:
       type: object
       required: [code, message, timestamp]
@@ -869,8 +881,7 @@ components:
       required: [id, name, centerLatitude, centerLongitude, radiusMeters]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/ZoneId'
         name:
           type: string
         centerLatitude:
@@ -882,7 +893,7 @@ components:
         radiusMeters:
           type: integer
       example:
-        id: a0000000-0000-0000-0000-000000000001
+        id: zone_001
         name: Campus
         centerLatitude: 48.21
         centerLongitude: 16.36
@@ -890,11 +901,10 @@ components:
 
     Vehicle:
       type: object
-      required: [id, label, type, status, batteryPercent, latitude, longitude, rentable]
+      required: [id, label, type, status, batteryPercent, latitude, longitude, rentable, lastBatteryAt, lastLocationAt]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/VehicleId'
         label:
           type: string
           description: Human-readable code on the vehicle.
@@ -913,17 +923,26 @@ components:
           type: number
           format: double
         zoneId:
-          type: string
-          format: uuid
           nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ZoneId'
         rentable:
           type: boolean
           readOnly: true
           description: Derived. True when status is AVAILABLE and battery is at least 20 percent.
+        lastBatteryAt:
+          type: string
+          format: date-time
+          description: measuredAt of the last applied battery reading. Freshness of `batteryPercent`.
+        lastLocationAt:
+          type: string
+          format: date-time
+          description: measuredAt of the last applied location reading. Freshness of `latitude`/`longitude`.
         lastTelemetryAt:
           type: string
           format: date-time
           nullable: true
+          description: Activity only (last time any telemetry arrived). Never use it to judge whether a measurement is current.
         createdAt:
           type: string
           format: date-time
@@ -931,15 +950,17 @@ components:
           type: string
           format: date-time
       example:
-        id: b0000000-0000-0000-0000-000000000001
+        id: veh_001
         label: EB-001
         type: E_BIKE
         status: AVAILABLE
         batteryPercent: 92
         latitude: 48.2102
         longitude: 16.3598
-        zoneId: a0000000-0000-0000-0000-000000000001
+        zoneId: zone_001
         rentable: true
+        lastBatteryAt: '2026-11-09T08:29:50Z'
+        lastLocationAt: '2026-11-09T08:29:40Z'
         lastTelemetryAt: '2026-11-09T08:29:50Z'
         createdAt: '2026-11-01T10:00:00Z'
         updatedAt: '2026-11-09T08:29:50Z'
@@ -954,15 +975,17 @@ components:
               type: integer
               description: Straight-line distance from the requested point.
       example:
-        id: b0000000-0000-0000-0000-000000000001
+        id: veh_001
         label: EB-001
         type: E_BIKE
         status: AVAILABLE
         batteryPercent: 92
         latitude: 48.2102
         longitude: 16.3598
-        zoneId: a0000000-0000-0000-0000-000000000001
+        zoneId: zone_001
         rentable: true
+        lastBatteryAt: '2026-11-09T08:29:50Z'
+        lastLocationAt: '2026-11-09T08:29:40Z'
         lastTelemetryAt: '2026-11-09T08:29:50Z'
         createdAt: '2026-11-01T10:00:00Z'
         updatedAt: '2026-11-09T08:29:50Z'
@@ -1015,11 +1038,9 @@ components:
       required: [id, vehicleId, riderId, status, startedAt, startLatitude, startLongitude, startBatteryPercent]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/RentalId'
         vehicleId:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/VehicleId'
         riderId:
           type: string
         status:
@@ -1051,8 +1072,8 @@ components:
           type: integer
           nullable: true
       example:
-        id: c0000000-0000-0000-0000-000000000001
-        vehicleId: b0000000-0000-0000-0000-000000000005
+        id: rnt_001
+        vehicleId: veh_005
         riderId: rider-demo-1
         status: ACTIVE
         startedAt: '2026-11-09T08:20:00Z'
@@ -1069,14 +1090,13 @@ components:
       required: [vehicleId, riderId]
       properties:
         vehicleId:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/VehicleId'
         riderId:
           type: string
           minLength: 1
           maxLength: 64
       example:
-        vehicleId: b0000000-0000-0000-0000-000000000001
+        vehicleId: veh_001
         riderId: rider-demo-2
 
     RentalReturn:
@@ -1103,11 +1123,9 @@ components:
       required: [id, vehicleId, reason, status, openedAt]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/MaintenanceId'
         vehicleId:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/VehicleId'
         reason:
           $ref: '#/components/schemas/MaintenanceReason'
         status:
@@ -1126,8 +1144,8 @@ components:
           format: date-time
           nullable: true
       example:
-        id: d0000000-0000-0000-0000-000000000002
-        vehicleId: b0000000-0000-0000-0000-000000000012
+        id: mnt_002
+        vehicleId: veh_012
         reason: FAULT
         status: OPEN
         faultCode: BRAKE_SENSOR
@@ -1201,8 +1219,7 @@ components:
             required: [zoneId, zoneName, available, rented, maintenanceRequired]
             properties:
               zoneId:
-                type: string
-                format: uuid
+                $ref: '#/components/schemas/ZoneId'
               zoneName:
                 type: string
               available:
@@ -1222,7 +1239,7 @@ components:
         lowBatteryCount: 1
         averageBatteryPercent: 62.7
         zones:
-          - zoneId: a0000000-0000-0000-0000-000000000001
+          - zoneId: zone_001
             zoneName: Campus
             available: 3
             rented: 0
@@ -1241,16 +1258,15 @@ components:
           type: string
           enum: [CHARGE, MOVE]
         vehicleId:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/VehicleId'
         fromZoneId:
-          type: string
-          format: uuid
           nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ZoneId'
         toZoneId:
-          type: string
-          format: uuid
           nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ZoneId'
         reason:
           type: string
 
@@ -1260,11 +1276,9 @@ components:
       required: [id, plannerRunId, status, actions, createdAt]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/ProposalId'
         plannerRunId:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/PlannerRunId'
         status:
           $ref: '#/components/schemas/ProposalStatus'
         summary:
@@ -1294,18 +1308,18 @@ components:
           type: string
           nullable: true
       example:
-        id: e0000000-0000-0000-0000-000000000001
-        plannerRunId: f0000000-0000-0000-0000-000000000001
+        id: prop_001
+        plannerRunId: run_001
         status: PENDING
         summary: Move 2 scooters to Campus and charge 1 low-battery bike.
         actions:
           - type: CHARGE
-            vehicleId: b0000000-0000-0000-0000-000000000011
+            vehicleId: veh_011
             reason: Battery is 8 percent
           - type: MOVE
-            vehicleId: b0000000-0000-0000-0000-000000000007
-            fromZoneId: a0000000-0000-0000-0000-000000000002
-            toZoneId: a0000000-0000-0000-0000-000000000001
+            vehicleId: veh_007
+            fromZoneId: zone_002
+            toZoneId: zone_001
             reason: Campus has high morning demand and only 3 available vehicles
         inputDataVersion: readmodel-2026-11-09T08:00:00Z
         modelId: mock
@@ -1343,8 +1357,7 @@ components:
       required: [id, status, mode, startedAt]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/PlannerRunId'
         status:
           type: string
           enum: [RUNNING, COMPLETED, FAILED]
@@ -1361,13 +1374,12 @@ components:
         proposalIds:
           type: array
           items:
-            type: string
-            format: uuid
+            $ref: '#/components/schemas/ProposalId'
         errorMessage:
           type: string
           nullable: true
       example:
-        id: f0000000-0000-0000-0000-000000000001
+        id: run_001
         status: RUNNING
         mode: MOCK
         startedAt: '2026-11-09T08:00:00Z'
