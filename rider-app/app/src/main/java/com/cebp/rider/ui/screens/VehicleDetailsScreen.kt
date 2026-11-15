@@ -13,21 +13,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.cebp.rider.R
-import com.cebp.rider.data.RentalException
+import com.cebp.rider.data.RiderException
 import com.cebp.rider.data.RiderRepository
 import com.cebp.rider.model.Vehicle
-import com.cebp.rider.model.VehicleStatus
 import com.cebp.rider.ui.components.CenteredMessage
-import com.cebp.rider.ui.components.LoadState
-import com.cebp.rider.ui.components.LoadingIndicator
+import com.cebp.rider.ui.components.LoadContent
 import com.cebp.rider.ui.components.RiderScaffold
 import com.cebp.rider.ui.components.labelRes
+import com.cebp.rider.ui.components.messageRes
 import com.cebp.rider.ui.components.rememberLoad
+import java.util.UUID
 import kotlinx.coroutines.launch
 
 @Composable
@@ -37,41 +38,40 @@ fun VehicleDetailsRoute(
     onBack: () -> Unit,
     onRentalStarted: (rentalId: String) -> Unit,
 ) {
-    val state = rememberLoad(vehicleId) { repository.getVehicle(vehicleId) }
+    val load = rememberLoad(vehicleId) { repository.getVehicle(vehicleId) }
     val scope = rememberCoroutineScope()
     var submitting by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<RiderException?>(null) }
+    // One key per visit to this screen: retrying after a network failure reuses it, so the
+    // backend returns the rental it may already have created instead of starting a second one.
+    val idempotencyKey = rememberSaveable(vehicleId) { UUID.randomUUID().toString() }
 
     RiderScaffold(
         title = stringResource(R.string.vehicle_details_title),
         onBack = onBack,
     ) { padding ->
-        when (state) {
-            LoadState.Loading -> LoadingIndicator(padding)
-            is LoadState.Ready -> {
-                val vehicle = state.value
-                if (vehicle == null) {
-                    CenteredMessage(stringResource(R.string.vehicle_not_found), padding)
-                } else {
-                    VehicleDetailsContent(
-                        vehicle = vehicle,
-                        padding = padding,
-                        startEnabled = vehicle.status == VehicleStatus.AVAILABLE && !submitting,
-                        error = error,
-                        onStartRental = {
-                            submitting = true
-                            error = null
-                            scope.launch {
-                                try {
-                                    onRentalStarted(repository.startRental(vehicle.id).id)
-                                } catch (e: RentalException) {
-                                    error = e.message
-                                    submitting = false
-                                }
+        LoadContent(load, padding) { vehicle ->
+            if (vehicle == null) {
+                CenteredMessage(stringResource(R.string.vehicle_not_found), padding)
+            } else {
+                VehicleDetailsContent(
+                    vehicle = vehicle,
+                    padding = padding,
+                    startEnabled = vehicle.rentable && !submitting,
+                    error = error?.let { stringResource(it.messageRes) },
+                    onStartRental = {
+                        submitting = true
+                        error = null
+                        scope.launch {
+                            try {
+                                onRentalStarted(repository.startRental(vehicle.id, idempotencyKey).id)
+                            } catch (e: RiderException) {
+                                error = e
+                                submitting = false
                             }
-                        },
-                    )
-                }
+                        }
+                    },
+                )
             }
         }
     }
@@ -89,11 +89,13 @@ private fun VehicleDetailsContent(
         modifier = Modifier.padding(padding).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(vehicle.id, style = MaterialTheme.typography.headlineSmall)
+        Text(vehicle.label, style = MaterialTheme.typography.headlineSmall)
         Text(stringResource(vehicle.type.labelRes))
         Text(stringResource(R.string.vehicle_battery, vehicle.batteryPercent))
-        Text(stringResource(R.string.vehicle_area, vehicle.area))
         Text(stringResource(R.string.vehicle_status, stringResource(vehicle.status.labelRes)))
+        if (!vehicle.rentable) {
+            Text(stringResource(R.string.vehicle_not_rentable))
+        }
         if (error != null) {
             Text(error, color = MaterialTheme.colorScheme.error)
         }

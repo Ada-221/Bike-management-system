@@ -13,10 +13,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.cebp.rider.R
 import com.cebp.rider.data.RiderRepository
-import com.cebp.rider.model.Rental
-import com.cebp.rider.ui.components.LoadState
-import com.cebp.rider.ui.components.LoadingIndicator
+import com.cebp.rider.ui.components.LoadContent
 import com.cebp.rider.ui.components.RiderScaffold
+import com.cebp.rider.ui.components.durationText
 import com.cebp.rider.ui.components.rememberLoad
 import com.cebp.rider.ui.components.toLocalTimeText
 import java.time.Duration
@@ -27,25 +26,21 @@ fun RentalSummaryRoute(
     repository: RiderRepository,
     onDone: () -> Unit,
 ) {
-    val state = rememberLoad(rentalId) { repository.getRental(rentalId) }
+    val load = rememberLoad(rentalId) { repository.getRentalWithVehicleLabel(rentalId) }
 
     RiderScaffold(title = stringResource(R.string.rental_summary_title)) { padding ->
-        when (state) {
-            LoadState.Loading -> LoadingIndicator(padding)
-            is LoadState.Ready -> {
-                val rental = state.value
-                Column(
-                    modifier = Modifier.padding(padding).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (rental?.endedAt == null) {
-                        Text(stringResource(R.string.rental_not_found))
-                    } else {
-                        RentalDetails(rental)
-                    }
-                    Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.rental_done))
-                    }
+        LoadContent(load, padding) { loaded ->
+            Column(
+                modifier = Modifier.padding(padding).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (loaded?.rental?.endedAt == null) {
+                    Text(stringResource(R.string.rental_not_found))
+                } else {
+                    RentalDetails(loaded)
+                }
+                Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.rental_done))
                 }
             }
         }
@@ -53,18 +48,22 @@ fun RentalSummaryRoute(
 }
 
 @Composable
-private fun RentalDetails(rental: Rental) {
+private fun RentalDetails(loaded: RentalWithVehicle) {
+    val rental = loaded.rental
     val endedAt = requireNotNull(rental.endedAt)
     Text(
-        text = stringResource(R.string.rental_vehicle, rental.vehicleId),
+        text = stringResource(R.string.rental_vehicle, loaded.vehicleLabel),
         style = MaterialTheme.typography.headlineSmall,
     )
     Text(stringResource(R.string.rental_started_at, rental.startedAt.toLocalTimeText()))
     Text(stringResource(R.string.rental_ended_at, endedAt.toLocalTimeText()))
     Text(
         stringResource(
-            R.string.rental_duration_minutes,
-            Duration.between(rental.startedAt, endedAt).toMinutes(),
+            R.string.rental_duration,
+            durationText(Duration.between(rental.startedAt, endedAt)),
         ),
     )
+    rental.endBatteryPercent?.let { end ->
+        Text(stringResource(R.string.rental_battery_used, rental.startBatteryPercent, end))
+    }
 }
