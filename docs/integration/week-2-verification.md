@@ -37,7 +37,7 @@ integration result.
 | Android demo instrumentation | BLOCKED: no SDK/emulator available. CI provisions API 35 and runs demo-mode instrumentation with an empty backend URL. |
 | Compose configuration | PASS: `docker compose --env-file .env.example config --quiet`. |
 | All five Compose images | PASS: backend, telemetry, MCP, dashboard, schema viewer built. |
-| Combined smoke | PASS: `node scripts/compose-smoke.mjs`; project `week2-smoke-1794766423648-45512`, results/logs under `build/week2-smoke-1794766423648-45512/`. |
+| Combined smoke | PASS twice: `node scripts/compose-smoke.mjs`; final project `week2-smoke-1794766886633-44640`, results/logs under `build/week2-smoke-1794766886633-44640/`. Final rerun explicitly pinned the smoke backend URL/mappings against inherited shell overrides. |
 
 The combined smoke used fresh project-scoped volumes and no published host
 ports. PostgreSQL and Kafka became healthy, backend started with development
@@ -86,6 +86,14 @@ MCP Kafka projection, demand, OFFLINE inference or operational proposal executio
 was introduced. Backend application code and applied migrations are unchanged.
 
 GitHub CLI is unavailable and a noninteractive credential lookup did not provide
-an authenticated GitHub API credential. Hosted CI and GitHub mergeability cannot
-be claimed verified. See the prepared [PR description](week-2-pr.md). Android and
-hosted checks must pass before declaring the PR ready.
+an authenticated GitHub API credential. The approved push was attempted with
+`git push --set-upstream origin integration/week-2` and failed because Git could
+not read a GitHub username with prompts disabled. The branch is committed locally
+but **not pushed**, and no PR was created. Hosted CI and GitHub mergeability cannot
+be claimed verified. GitHub authentication is required to finish delivery.
+
+After signing in, push the branch and use this
+[PR creation link](https://github.com/Ada-221/Bike-management-system/compare/main...integration/week-2?expand=1)
+with the prepared [PR description](week-2-pr.md). Keep the PR draft until Android
+and hosted checks pass. Fetch main again, merge it into the integration branch if
+it advanced, and rerun affected checks before declaring readiness.
