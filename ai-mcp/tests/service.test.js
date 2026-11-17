@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { manifest, toolSchemas, validate, validateProposal } from "../src/contract.js";
-import { createJsonStore, createService, statusForMcp, areaZone, validateAreaMap, createBackend, ServiceError } from "../src/service.js";
+import { createJsonStore, createService, statusForMcp, areaZone, validateAreaMap, ServiceError } from "../src/service.js";
 import { createHttpServer } from "../src/server.js";
 
 const now = new Date("2026-11-10T10:00:00.000Z");
@@ -15,12 +15,16 @@ const vehicles = [
   { id: "veh_003", zoneId: zone.id, status: "MAINTENANCE_REQUIRED", batteryPercent: 9, latitude: 45.76, longitude: 21.22, lastBatteryAt: "2026-11-10T09:57:00Z", lastLocationAt: "2026-11-10T09:56:00Z", updatedAt: "2026-11-10T09:57:00Z" },
 ];
 
+function provider(read) {
+  return { snapshot: async () => ({ asOf: now.toISOString(), vehicles: await read() }), readiness: () => ({ ready: true, diagnostic: "Test provider" }) };
+}
+
 async function fixture(t) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "cebp-mcp-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const store = createJsonStore(directory);
-  const backend = { vehicles: async () => structuredClone(vehicles) };
-  return { store, service: createService({ backend, areaMap: { area_campus: zone.id }, store, clock: () => new Date(now) }), directory };
+  const snapshotProvider = provider(async () => structuredClone(vehicles));
+  return { store, service: createService({ snapshotProvider, areaMap: { area_campus: zone.id }, store, clock: () => new Date(now) }), directory };
 }
 
 test("tool discovery and input validation use the frozen v1 contract", () => {
@@ -50,7 +54,7 @@ test("status adapter preserves backend vocabulary and rejects unsettled OFFLINE 
   assert.throws(() => validateAreaMap({ area_campus: zone.id, area_other: zone.id }));
 });
 
-test("low-battery and availability tools query backend state and return schema-valid results", async (t) => {
+test("low-battery and availability tools read projection snapshots and return schema-valid results", async (t) => {
   const { service, directory } = await fixture(t);
   const low = await service.callTool("list_low_battery_vehicles", { schemaVersion: "1.0", thresholdPercent: 20, pageSize: 10, maxReadModelAgeSeconds: 300 });
   assert.equal(validate(low, toolSchemas.get("list_low_battery_vehicles").output).length, 0);
@@ -60,7 +64,7 @@ test("low-battery and availability tools query backend state and return schema-v
   assert.deepEqual(available.vehicles.map((vehicle) => vehicle.vehicleId), ["veh_001"]);
   assert.equal(available.vehicles[0].batteryMeasuredAt, "2026-11-10T09:59:00Z");
   assert.equal(available.vehicles[0].locationMeasuredAt, "2026-11-10T09:58:00Z");
-  assert.ok((await readFile(path.join(directory, "state.json"), "utf8")).includes("readModel"));
+  assert.deepEqual((await service.loadState()).vehicles, vehicles);
 });
 
 test("HTTP server exposes health and the agreed MCP JSON-RPC tool interface", async (t) => {
@@ -98,14 +102,11 @@ test("demand tool returns a contract-shaped unavailable result while ownership i
   assert.equal(validate(result, toolSchemas.get("get_demand_by_area").output).length, 0);
 });
 
-test("backend adapter preserves API prefixes with either trailing-slash form and propagates failures", async () => {
-  for (const base of ["http://fleet/api/v1", "http://fleet/api/v1/"]) {
-    const seen = [];
-    const backend = createBackend(base, async (url) => { seen.push(url.href); return { ok: true, json: async () => vehicles }; });
-    assert.deepEqual(await backend.vehicles(), vehicles);
-    assert.deepEqual(seen, ["http://fleet/api/v1/vehicles?limit=500"]);
+test("production startup has no backend REST dependency or fallback", async () => {
+  for (const file of ["server.js", "service.js", "consumer.js", "projection.js"]) {
+    const source = await readFile(new URL("../src/" + file, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /BACKEND_API_URL|createBackend|fetch\(/);
   }
-  await assert.rejects(createBackend("http://fleet/api/v1", async () => ({ ok: false, status: 503 })).vehicles(), (e) => e.code === "READ_MODEL_UNAVAILABLE");
 });
 
 const lowArgs = { schemaVersion: "1.0", thresholdPercent: 20, pageSize: 1, maxReadModelAgeSeconds: 300 };
@@ -120,20 +121,20 @@ test("pagination tokens satisfy schemas, continue once, and reject changed queri
   assert.equal(second.vehicles[0].vehicleId, "veh_001");
   assert.deepEqual(second.pagination, { hasMore: false });
   assert.equal((await service.callTool("list_low_battery_vehicles", { ...lowArgs, cursor })).error.code, "CURSOR_EXPIRED");
-  const restarted = createService({ backend: { vehicles: async () => vehicles }, areaMap: { area_campus: zone.id }, store });
+  const restarted = createService({ snapshotProvider: provider(async () => vehicles), areaMap: { area_campus: zone.id }, store, clock: () => new Date(now) });
   assert.equal((await restarted.callTool("list_low_battery_vehicles", { ...lowArgs, cursor })).error.code, "CURSOR_EXPIRED");
-  const changed = createService({ backend: { vehicles: async () => vehicles.map(v => ({ ...v, batteryPercent: 1 })) }, areaMap: { area_campus: zone.id }, store });
+  const changed = createService({ snapshotProvider: provider(async () => vehicles.map(v => ({ ...v, batteryPercent: 1 }))), areaMap: { area_campus: zone.id }, store, clock: () => new Date(now) });
   assert.equal((await changed.callTool("list_low_battery_vehicles", { ...lowArgs, cursor })).error.code, "CURSOR_EXPIRED");
 });
 
-test("unknown areas, invalid snapshots, missing timestamps and backend failures fail clearly", async (t) => {
+test("unknown areas, invalid snapshots, missing timestamps and provider failures fail clearly", async (t) => {
   const { store, service } = await fixture(t);
   assert.equal((await service.callTool("get_vehicle_availability_by_area", { schemaVersion: "1.0", areaId: "area_unknown", pageSize: 10, maxReadModelAgeSeconds: 300 })).error.code, "UNKNOWN_AREA");
-  for (const snapshot of [null, Array.from({ length: 500 }, (_, i) => ({ ...vehicles[0], id: `veh_${String(i).padStart(3,"0")}` })), [{ ...vehicles[0], id: "uuid" }], [{ ...vehicles[0], lastBatteryAt: null }], vehicles.map(v => ({ ...v, zoneId: "zone_unmapped" }))]) {
-    const s = createService({ backend: { vehicles: async () => snapshot }, areaMap: { area_campus: zone.id }, store });
+  for (const snapshot of [null, [{ ...vehicles[0], id: "uuid" }], [{ ...vehicles[0], lastBatteryAt: null }], vehicles.map(v => ({ ...v, zoneId: "zone_unmapped" }))]) {
+    const s = createService({ snapshotProvider: provider(async () => snapshot), areaMap: { area_campus: zone.id }, store, clock: () => new Date(now) });
     assert.ok((await s.callTool("list_low_battery_vehicles", lowArgs)).error);
   }
-  const failed = createService({ backend: { vehicles: async () => { throw new Error("connection failed"); } }, store });
+  const failed = createService({ snapshotProvider: provider(async () => { throw new Error("connection failed"); }), store, clock: () => new Date(now) });
   assert.equal((await failed.callTool("list_low_battery_vehicles", lowArgs)).error.code, "READ_MODEL_UNAVAILABLE");
 });
 
@@ -159,18 +160,18 @@ test("cursors expire and reject changed snapshots in the same process", async (t
   const { store } = await fixture(t);
   let current = structuredClone(vehicles);
   let timestamp = now.getTime();
-  const service = createService({ backend: { vehicles: async () => current }, areaMap: { area_campus: zone.id }, store, clock: () => new Date(timestamp) });
+  const service = createService({ snapshotProvider: provider(async () => current), areaMap: { area_campus: zone.id }, store, clock: () => new Date(timestamp) });
   const first = await service.callTool("list_low_battery_vehicles", lowArgs);
   current[0].batteryPercent = 11;
   assert.equal((await service.callTool("list_low_battery_vehicles", { ...lowArgs, cursor: first.pagination.nextCursor })).error.code, "CURSOR_EXPIRED");
-  const next = await service.callTool("list_low_battery_vehicles", lowArgs);
+  const next = await service.callTool("list_low_battery_vehicles", { ...lowArgs, maxReadModelAgeSeconds: 3600 });
   timestamp += 15 * 60 * 1000 + 1;
-  assert.equal((await service.callTool("list_low_battery_vehicles", { ...lowArgs, cursor: next.pagination.nextCursor })).error.code, "CURSOR_EXPIRED");
+  assert.equal((await service.callTool("list_low_battery_vehicles", { ...lowArgs, maxReadModelAgeSeconds: 3600, cursor: next.pagination.nextCursor })).error.code, "CURSOR_EXPIRED");
 });
 
 test("availability pagination sorts backend IDs and retains the complete count", async (t) => {
   const { store } = await fixture(t);
-  const service = createService({ backend: { vehicles: async () => [...vehicles].reverse().map(v => ({ ...v, status: "AVAILABLE" })) }, areaMap: { area_campus: zone.id }, store });
+  const service = createService({ snapshotProvider: provider(async () => [...vehicles].reverse().map(v => ({ ...v, status: "AVAILABLE" }))), areaMap: { area_campus: zone.id }, store, clock: () => new Date(now) });
   const args = { schemaVersion: "1.0", areaId: "area_campus", pageSize: 2, maxReadModelAgeSeconds: 300 };
   const first = await service.callTool("get_vehicle_availability_by_area", args);
   assert.equal(first.availableCount, 3);
@@ -183,7 +184,7 @@ test("availability pagination sorts backend IDs and retains the complete count",
 test("planner follows tool pagination when available candidates occur after the first page", async (t) => {
   const { store } = await fixture(t);
   const fleet = Array.from({ length: 102 }, (_, i) => ({ ...vehicles[0], id: `veh_${String(i).padStart(3, "0")}`, status: i < 100 ? "MAINTENANCE_REQUIRED" : "AVAILABLE", batteryPercent: 10 }));
-  const service = createService({ backend: { vehicles: async () => fleet }, areaMap: { area_campus: zone.id }, store });
+  const service = createService({ snapshotProvider: provider(async () => fleet), areaMap: { area_campus: zone.id }, store, clock: () => new Date(now) });
   const proposal = await service.createProposal();
   assert.deepEqual(proposal.actions.map(v => v.vehicleId), ["veh_100", "veh_101"]);
   assert.equal(proposal.snapshot.sources.length, 2);

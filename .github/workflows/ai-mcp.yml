@@ -36,6 +36,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm ci
+        working-directory: ai-mcp
       - run: npm test
         working-directory: ai-mcp
       - run: npm run check

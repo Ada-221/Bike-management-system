@@ -1,4 +1,4 @@
-name: Week 2 integration
+name: Component and Week 3 Kafka integration
 on: [push, pull_request, workflow_dispatch]
 jobs:
   java:
@@ -31,7 +31,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: operator-dashboard/package-lock.json
-      - run: npm test && npm run check
+      - run: npm ci && npm test && npm run check
         working-directory: ai-mcp
       - run: npm ci
         working-directory: operator-dashboard
@@ -84,4 +84,4 @@ jobs:
         if: always()
         with:
           name: combined-compose-evidence
-          path: build/week2-smoke-*
+          path: build/week3-smoke-*

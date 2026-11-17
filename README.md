@@ -12,7 +12,8 @@ charging and redistribution proposals.
 - [Six-week implementation plan](docs/project/CEBP_Project2_Implementation_Plan.md)
 - [Week 1 implementation summary](docs/project/week-1-implementation.md)
 - [AI/MCP Week 1 contracts](contracts/ai-mcp/v1/README.md)
-- [AI/MCP Week 2 service](ai-mcp/README.md)
+- [AI/MCP Week 3 service and replay](ai-mcp/README.md)
+- [Person 5 Week 3 implementation plan](docs/ai-mcp/week-3-implementation-plan.md)
 - [AI/MCP evaluation criteria](docs/ai-mcp/evaluation-criteria.md)
 - [AI/MCP test plan](docs/ai-mcp/test-plan.md)
 - [Person 5 Week 1 traceability](docs/ai-mcp/week-1-traceability.md)
@@ -35,10 +36,11 @@ The schema explorer reads the v1 manifest and schemas from a read-only Docker vo
 so it reflects the contract files in `contracts/ai-mcp/v1` without copying them into
 the viewer image.
 
-MCP waits for backend health and exposes dependency readiness at
-<http://localhost:8083/ready>. Its internal backend URL is
-`http://fleet-management-service:8080/api/v1/`; `BACKEND_API_URL` can override it
-for standalone deployments. PostgreSQL, Kafka and MCP state have named volumes.
+MCP waits for Kafka and topic initialization and exposes projection readiness at
+<http://localhost:8083/ready>. It reads only its durable JSON Kafka projection.
+Configure `MCP_KAFKA_BROKERS` and a dedicated `MCP_KAFKA_GROUP_ID`; PostgreSQL,
+Kafka and MCP state have named volumes. Backend producer integration is gated
+pending Persons 1/2 agreement in [the handoff](integration-review.md).
 
 Telemetry is opt-in: see the [telemetry demo](telemetry-ingestion-service/README.md).
 The `telemetry` profile uses `kafka:9092`; its simulator stays disabled unless
@@ -46,14 +48,16 @@ The `telemetry` profile uses `kafka:9092`; its simulator stays disabled unless
 
 Rider demo mode remains the default. The backend does not implement nearby or
 rental endpoints required by the optional rider HTTP adapter. The dashboard
-continues to use fixtures. Telemetry consumers, MCP Kafka projection, demand,
-OFFLINE rules and operational proposal execution remain deferred.
+continues to use fixtures. The MCP consumer is implemented; backend publication
+and owner-approved event contracts remain outstanding. Demand, OFFLINE rules
+and operational proposal execution remain deferred.
 
 Run `node scripts/compose-smoke.mjs` for a fresh isolated stack with no host port
-collisions. It captures results and logs under `build/week2-smoke-*` and removes
+collisions. It uses draft backend fixtures and real telemetry, captures evidence
+under `build/week3-smoke-*`, and removes
 only its own uniquely named containers and test volumes. Existing developer
-volumes are preserved. See [Week 2 verification](docs/integration/week-2-verification.md)
-for component checks and readiness blockers.
+volumes are preserved. See [Week 3 verification](docs/ai-mcp/week-3-verification.md)
+for current evidence and producer integration gates; Week 2 reports are historical.
 
 ## Safety boundary
 

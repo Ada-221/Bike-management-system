@@ -81,26 +81,44 @@ services:
       - ./contracts/ai-mcp/v1:/usr/share/nginx/html/contracts:ro
     restart: unless-stopped
   ai-mcp-service:
+    stop_grace_period: 60s
     build:
       context: .
       dockerfile: ai-mcp/Dockerfile
     ports:
       - "8083:8083"
     environment:
-      BACKEND_API_URL: ${BACKEND_API_URL:-http://fleet-management-service:8080/api/v1/}
+      MCP_KAFKA_BROKERS: ${MCP_KAFKA_BROKERS:-kafka:9092}
+      MCP_KAFKA_GROUP_ID: ${MCP_KAFKA_GROUP_ID:-cebp-mcp-read-model-v1}
+      # Pending Persons 1/2 agreement. Empty rejects draft backend events.
+      MCP_BACKEND_EVENT_CONTRACT: ${MCP_BACKEND_EVENT_CONTRACT:-}
       MCP_AREA_ZONE_MAP_JSON: ${MCP_AREA_ZONE_MAP_JSON:-}
       MCP_STATE_DIR: /data
     volumes:
       - ai-mcp-state:/data
     depends_on:
-      fleet-management-service:
+      kafka:
         condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8083/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
       timeout: 3s
       retries: 20
     restart: unless-stopped
+
+  kafka-topics:
+    image: apache/kafka:4.1.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        for topic in fleet.vehicle fleet.rental fleet.maintenance; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$topic" --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=-1
+        done
 
   telemetry:
     profiles: [telemetry]
@@ -112,6 +130,8 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
 
 volumes:
   postgres-data:

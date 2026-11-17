@@ -1,5 +1,8 @@
 # Week 2 verification - 2026-11-15
 
+Historical evidence: this report predates the Week 3 Kafka projection. See
+[Week 3 verification](week-3-verification.md) for current evidence and gates.
+
 Delivery branch: `feature/ai-mcp-contracts`, fast-forwarded from `3633333` to
 `6d7d282` before reconciliation. `main` and the Week 2 branch remain unchanged.
 The backend source was exported from `origin/feature/fleet-domain-model`
