@@ -4,12 +4,36 @@ import path from "node:path";
 import test from "node:test";
 import { acquireWriter, createJsonStore } from "../src/store.js";
 import { createProjection } from "../src/projection.js";
-import { normalizeEvent, DRAFT_CONTRACT, TOPICS } from "../src/events.js";
+import { normalizeEvent, DRAFT_CONTRACT, FLEET_CONTRACT, TOPICS } from "../src/events.js";
 import { createService } from "../src/service.js";
 import { consumeBatch } from "../src/consumer.js";
 import { createHttpServer } from "../src/server.js";
 import { toolSchemas, validate } from "../src/contract.js";
 import { fixture, event, record, NOW, lowArgs, availableArgs } from "./helpers.js";
+
+test("fleet v1 replay retains a faulted vehicle and applies return location and a null zone", async (t) => {
+  const base = new URL("../../contracts/fleet/v1/", import.meta.url);
+  const schema = JSON.parse(await readFile(new URL("fleet-event.schema.json", base)));
+  const examples = JSON.parse(await readFile(new URL("rental-fault-return.example.json", base)));
+  const f = await fixture(t, { backendContract: FLEET_CONTRACT });
+  const offsets = new Map();
+  for (const { topic, key, event: fleetEvent } of [...examples].reverse()) {
+    assert.deepEqual(validate(fleetEvent, schema), []);
+    const offset = offsets.get(topic) ?? 0;
+    await f.projection.process({ topic, partition: 0, offset: String(offset), key, value: JSON.stringify(fleetEvent) });
+    offsets.set(topic, offset + 1);
+  }
+  await f.confirm();
+  const [v] = (await f.projection.snapshot()).vehicles;
+  assert.equal(v.status, "MAINTENANCE_REQUIRED");
+  assert.equal(v.zoneId, null);
+  assert.equal(v.latitude, 48.24);
+  assert.equal(v.longitude, 16.40);
+  assert.equal((await f.service.callTool("get_vehicle_availability_by_area", availableArgs)).availableCount, 0);
+  const result = await f.service.callTool("list_low_battery_vehicles", { ...lowArgs, thresholdPercent: 100 });
+  assert.equal(result.vehicles[0].areaId, null);
+  assert.equal(result.vehicles[0].operationalStatus, "MAINTENANCE");
+});
 
 test("registration, telemetry, rental and maintenance produce schema-valid tools with backend-issued zone changes", async (t) => {
   const f = await fixture(t);

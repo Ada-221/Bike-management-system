@@ -8,8 +8,8 @@ const newerMeasurement = (a, b) => !b || timeOrder(a.measuredAt) > timeOrder(b.m
 function apply(state, e) {
   const record = state.vehicles[e.vehicleId] ??= { registered: false, data: { id: e.vehicleId }, order: {}, revisionClaims: {} };
   const p = e.payload;
-  const measurement = (field, measuredAt, values) => {
-    const order = { measuredAt, publishedAt: e.publishedAt, eventId: e.eventId };
+  const measurement = (field, measuredAt, values, publishedAt = e.publishedAt) => {
+    const order = { measuredAt, publishedAt, eventId: e.eventId };
     if (newerMeasurement(order, record.order[field])) {
       record.order[field] = order;
       Object.assign(record.data, values);
@@ -31,8 +31,15 @@ function apply(state, e) {
     }
     if (e.eventType === "VehicleRegistered") {
       record.registered = true;
-      measurement("battery", p.batteryMeasuredAt, { batteryPercent: p.batteryPercent, lastBatteryAt: p.batteryMeasuredAt });
-      measurement("location", p.locationMeasuredAt, { latitude: p.latitude, longitude: p.longitude, lastLocationAt: p.locationMeasuredAt });
+      // At equal measurement time, a real measurement takes precedence over the registration baseline.
+      const baseline = "0000-01-01T00:00:00Z";
+      measurement("battery", p.batteryMeasuredAt, { batteryPercent: p.batteryPercent, lastBatteryAt: p.batteryMeasuredAt }, baseline);
+      measurement("location", p.locationMeasuredAt, { latitude: p.latitude, longitude: p.longitude, lastLocationAt: p.locationMeasuredAt }, baseline);
+    }
+    if (e.eventType === "RentalEnded" && p.locationMeasuredAt !== undefined) {
+      measurement("location", p.locationMeasuredAt, {
+        latitude: p.endLatitude, longitude: p.endLongitude, lastLocationAt: p.locationMeasuredAt,
+      });
     }
   }
 }

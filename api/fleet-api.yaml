@@ -153,8 +153,8 @@ paths:
       operationId: listNearbyVehicles
       summary: Nearby rentable vehicles (rider view)
       description: |
-        Returns only **rentable** vehicles (`status = AVAILABLE` and battery at or above
-        `minBattery`), closest first, each with its distance in meters.
+        Returns only **rentable** vehicles, closest first, each with its distance in meters.
+        Battery must meet both the fleet rental threshold and the requested `minBattery`.
       parameters:
         - name: lat
           in: query
@@ -254,8 +254,9 @@ paths:
       operationId: reportMaintenance
       summary: Manually report a problem (operator)
       description: |
-        Opens a maintenance record. If the vehicle is `AVAILABLE` it becomes
-        `MAINTENANCE_REQUIRED`; if it is `RENTED` it stays `RENTED` until returned.
+        A `FAULT` makes the vehicle `MAINTENANCE_REQUIRED` immediately, including
+        during a trip. The rental remains `ACTIVE` and returnable. A `MANUAL` record
+        during a rental affects availability after return.
         Idempotent: if an unresolved record with the same reason already exists, that record
         is returned with `200`.
       requestBody:
@@ -419,6 +420,7 @@ paths:
       description: |
         Naturally idempotent: returning an already completed rental returns it unchanged
         (`200`) and does not publish a second `RentalEnded` event.
+        A trip remains returnable if a fault changed the vehicle to `MAINTENANCE_REQUIRED`.
       requestBody:
         required: true
         content:
@@ -484,7 +486,9 @@ paths:
       description: |
         Allowed transitions: `OPEN` to `IN_PROGRESS`, `OPEN` to `RESOLVED`,
         `IN_PROGRESS` to `RESOLVED`. Anything else gives `409 INVALID_STATUS_TRANSITION`.
-        Resolving the last unresolved record of a vehicle makes it `AVAILABLE` again.
+        An active trip returns to `RENTED` after its fault is resolved. Outside a trip,
+        availability requires enough battery and all maintenance records resolved.
+        A low-battery record cannot be resolved below the minimum rentable battery.
         Publishes `VehicleMaintenanceChanged`.
       requestBody:
         required: true
@@ -1206,6 +1210,7 @@ components:
               type: integer
         activeRentals:
           type: integer
+          description: Counts ACTIVE rentals, including trips with a vehicle in maintenance.
         lowBatteryCount:
           type: integer
           description: Vehicles with battery under 20 percent, in any status.

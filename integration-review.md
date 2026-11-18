@@ -1,5 +1,15 @@
 # Event and telemetry integration register
 
+## Person 1 Week 3 producer integration
+
+The backend publishes real fleet events through PostgreSQL and consumes
+battery, location, and fault telemetry. The revised lifecycle supports
+`MAINTENANCE_REQUIRED` with an active, returnable rental. The
+[fleet v1 draft](contracts/fleet/v1/README.md) and
+[Week 3 verification](docs/integration/week-3-fleet-verification.md) supersede
+the fixture-only handoff below for the isolated integration stack. Shared
+activation still requires affected-owner review.
+
 ## Combined Week 2 implementation
 
 The integration branch combines the fleet, telemetry, reconciled MCP and rider

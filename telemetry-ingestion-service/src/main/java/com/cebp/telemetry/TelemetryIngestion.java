@@ -44,4 +44,13 @@ class TelemetryIngestion {
                 kafka.send(TelemetryApplication.VEHICLE_TOPIC, measurement.vehicleId(), locationJson)
         );
     }
+
+    CompletableFuture<Void> publishFault(String vehicleId, Instant measuredAt, String code, String description)
+            throws JsonProcessingException {
+        VehicleEvent fault = new VehicleEvent("evt_" + UUID.randomUUID(), "VehicleFaultReported", "1.0",
+                measuredAt, Instant.now(), vehicleId, "corr_" + UUID.randomUUID(), "telemetry-ingestion-service",
+                new VehicleEvent.Fault(code, description));
+        return kafka.send(TelemetryApplication.VEHICLE_TOPIC, vehicleId, serializer.toJson(fault))
+                .thenApply(result -> null);
+    }
 }

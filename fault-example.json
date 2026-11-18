@@ -2,12 +2,13 @@
   "eventId": "evt_002",
   "eventType": "VehicleFaultReported",
   "schemaVersion": "1.0",
-  "timestamp": "2026-11-05T20:05:00Z",
+  "measuredAt": "2026-11-18T09:20:00Z",
+  "publishedAt": "2026-11-18T09:20:01Z",
   "vehicleId": "veh_001",
   "correlationId": "corr_002",
   "producer": "telemetry-ingestion-service",
   "payload": {
-    "faultCode": "BRAKE_FAILURE",
-    "description": "Simulated brake failure."
+    "faultCode": "BRAKE_SENSOR",
+    "description": "Simulated brake sensor fault."
   }
 }

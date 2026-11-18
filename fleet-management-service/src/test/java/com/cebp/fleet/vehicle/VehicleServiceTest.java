@@ -17,8 +17,8 @@ import com.cebp.fleet.common.IdGenerator;
 import com.cebp.fleet.common.NotFoundException;
 import com.cebp.fleet.config.FleetProperties;
 import com.cebp.fleet.event.EventPublisher;
+import com.cebp.fleet.event.FleetEvent;
 import com.cebp.fleet.event.Topics;
-import com.cebp.fleet.event.VehicleRegisteredEvent;
 import com.cebp.fleet.vehicle.dto.VehicleCreateRequest;
 import com.cebp.fleet.zone.ZoneAssigner;
 import java.time.Clock;
@@ -53,13 +53,16 @@ class VehicleServiceTest {
     private IdGenerator ids;
     @Mock
     private EventPublisher publisher;
+    @Mock
+    private MaintenanceService maintenance;
 
     private VehicleService service;
 
     @BeforeEach
     void setUp() {
         FleetProperties props = new FleetProperties(20, 50, 1000, 5000, 100, 500, 15);
-        service = new VehicleService(vehicles, zoneAssigner, ids, publisher,
+        service = new VehicleService(vehicles, zoneAssigner, ids,
+                new FleetState(vehicles, null, props, ids, publisher), maintenance,
                 Clock.fixed(NOW, ZoneOffset.UTC), props);
     }
 
@@ -93,13 +96,13 @@ class VehicleServiceTest {
 
         ArgumentCaptor<Object> event = ArgumentCaptor.forClass(Object.class);
         verify(publisher).publish(eq(Topics.FLEET_VEHICLE), eq("veh_001"), event.capture());
-        assertThat(event.getValue()).isInstanceOf(VehicleRegisteredEvent.class);
-        VehicleRegisteredEvent e = (VehicleRegisteredEvent) event.getValue();
+        assertThat(event.getValue()).isInstanceOf(FleetEvent.class);
+        FleetEvent e = (FleetEvent) event.getValue();
         assertThat(e.eventId()).isEqualTo("evt_0001");
         assertThat(e.eventType()).isEqualTo("VehicleRegistered");
         assertThat(e.producer()).isEqualTo("fleet-management-service");
         assertThat(e.vehicleId()).isEqualTo("veh_001");
-        assertThat(e.zoneId()).isEqualTo("zone_001");
+        assertThat(e.payload()).containsEntry("zoneId", "zone_001");
     }
 
     @Test
@@ -186,7 +189,7 @@ class VehicleServiceTest {
     @Test
     void renameToSameLabelChangesNothing() {
         Vehicle existing = existingVehicle("veh_001", "EB-001");
-        when(vehicles.findById("veh_001")).thenReturn(Optional.of(existing));
+        when(vehicles.findForUpdate("veh_001")).thenReturn(Optional.of(existing));
 
         Vehicle result = service.rename("veh_001", " EB-001 ");
 
@@ -198,7 +201,7 @@ class VehicleServiceTest {
     @Test
     void renameUpdatesLabelAndTimestamp() {
         Vehicle existing = existingVehicle("veh_001", "EB-001");
-        when(vehicles.findById("veh_001")).thenReturn(Optional.of(existing));
+        when(vehicles.findForUpdate("veh_001")).thenReturn(Optional.of(existing));
         when(vehicles.existsByLabel("EB-002")).thenReturn(false);
         when(vehicles.saveAndFlush(any(Vehicle.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -211,7 +214,7 @@ class VehicleServiceTest {
 
     @Test
     void renameToTakenLabelIsConflict() {
-        when(vehicles.findById("veh_001")).thenReturn(Optional.of(existingVehicle("veh_001", "EB-001")));
+        when(vehicles.findForUpdate("veh_001")).thenReturn(Optional.of(existingVehicle("veh_001", "EB-001")));
         when(vehicles.existsByLabel("EB-002")).thenReturn(true);
 
         assertThatThrownBy(() -> service.rename("veh_001", "EB-002"))
@@ -221,7 +224,7 @@ class VehicleServiceTest {
 
     @Test
     void renameUnknownVehicleIsNotFound() {
-        when(vehicles.findById("veh_999")).thenReturn(Optional.empty());
+        when(vehicles.findForUpdate("veh_999")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.rename("veh_999", "EB-002"))
                 .isInstanceOf(NotFoundException.class);

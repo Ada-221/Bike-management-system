@@ -24,6 +24,8 @@ services:
       FLEET_DB_URL: jdbc:postgresql://postgres:5432/fleet
       FLEET_DB_USER: fleet
       FLEET_DB_PASSWORD: ${POSTGRES_PASSWORD:-fleet}
+      FLEET_KAFKA_ENABLED: "true"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # "dev" also loads the demo zones. Remove this line for an empty zones table.
       SPRING_PROFILES_ACTIVE: dev
     ports:
@@ -31,6 +33,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/api/v1/health"]
       interval: 5s
@@ -90,7 +94,7 @@ services:
     environment:
       MCP_KAFKA_BROKERS: ${MCP_KAFKA_BROKERS:-kafka:9092}
       MCP_KAFKA_GROUP_ID: ${MCP_KAFKA_GROUP_ID:-cebp-mcp-read-model-v1}
-      # Pending Persons 1/2 agreement. Empty rejects draft backend events.
+      # Private demos may select fleet-week3-v1. Shared activation follows owner review.
       MCP_BACKEND_EVENT_CONTRACT: ${MCP_BACKEND_EVENT_CONTRACT:-}
       MCP_AREA_ZONE_MAP_JSON: ${MCP_AREA_ZONE_MAP_JSON:-}
       MCP_STATE_DIR: /data

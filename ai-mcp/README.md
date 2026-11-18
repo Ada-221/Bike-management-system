@@ -4,14 +4,10 @@ Node 22.12+ service with KafkaJS, a JSON event projection, frozen v1 MCP tools
 and a deterministic mock planner. Tools query only the projection. There is no
 runtime dependency on the backend API or fleet database and no REST fallback.
 
-**Producer integration is gated.** Existing Java telemetry events are supported.
-The backend still logs Week 2 registration events without the state revisions
-and measurement timestamps needed here. Draft backend event shapes in
-[integration-review.md](../integration-review.md) require Persons 1/2 agreement.
-`MCP_BACKEND_EVENT_CONTRACT` defaults to empty; receiving supported backend
-events without the agreement switch stops projection progress. The isolated
-fixture smoke explicitly uses `person5-week3-draft-v1`; that is not production
-acceptance or owner approval.
+**Shared activation is gated.** The real fleet outbox uses the
+[fleet-week3-v1 adapter](../contracts/fleet/v1/README.md). Set
+`MCP_BACKEND_EVENT_CONTRACT=fleet-week3-v1` in an isolated demo or after the
+affected owners review the contract. The Compose smoke opts in automatically.
 
 ## Startup
 
@@ -34,6 +30,7 @@ For host development, from `ai-mcp`:
 npm.cmd ci
 $env:MCP_KAFKA_BROKERS = 'localhost:29092'
 $env:MCP_KAFKA_GROUP_ID = 'cebp-mcp-local-v1'
+$env:MCP_BACKEND_EVENT_CONTRACT = 'fleet-week3-v1'
 $env:MCP_STATE_DIR = './data'
 $env:MCP_AREA_ZONE_MAP_JSON = '{"area_center":"zone_001","area_south":"zone_002"}'
 npm.cmd start
@@ -76,8 +73,9 @@ complete snapshot remains usable within the caller's `maxReadModelAgeSeconds`,
 then tools return `STALE_READ_MODEL`. Readiness stays false until recovery.
 
 Explicit `area_...` → `zone_...` mappings are required. Malformed/ambiguous maps
-fail startup. Unknown query areas return `UNKNOWN_AREA`; unmapped low-battery
-records fail clearly. Status translation remains `RENTED` → `IN_USE` and
+fail startup. Unknown query areas return `UNKNOWN_AREA`. A vehicle outside
+all fleet zones has a null `areaId` in low-battery results. A non-null zone
+without a configured mapping fails clearly. Status translation remains `RENTED` → `IN_USE` and
 `MAINTENANCE_REQUIRED` → `MAINTENANCE`. Independent measurement timestamps are
 preserved; `availableSince` remains null. No 500-vehicle backend cap applies.
 
@@ -90,7 +88,7 @@ do not invalidate them.
 
 The following requests read the Kafka projection. A fresh empty broker has an
 empty fleet until complete registration history is available. Run the isolated
-fixture smoke below to exercise records while production contracts are pending.
+smoke below for examples driven by the fleet and telemetry services.
 
 ```powershell
 $headers = @{ 'MCP-Protocol-Version' = '2026-07-28'; 'Content-Type' = 'application/json' }
@@ -141,9 +139,10 @@ npm.cmd run check
 node scripts/compose-smoke.mjs
 ```
 
-The smoke writes evidence under `build/week3-smoke-*`. It uses backend fixtures,
-real Java telemetry, backend shutdown, restart/deduplication, broker outage and
-recovery, and offline replay comparison. It verifies advisory approval persists.
+The smoke writes evidence under `build/week3-smoke-*`. It uses real fleet REST
+and Java telemetry, a recoverable mid-trip fault, broker outage and outbox
+recovery, backend shutdown, and offline replay. It verifies that advisory
+approval persists.
 The old `scripts/backend-smoke.mjs` is historical Week 2 coverage, not the active
 acceptance path. See [plan](../docs/ai-mcp/week-3-implementation-plan.md) and
 [Week 3 evidence](../docs/ai-mcp/week-3-verification.md).

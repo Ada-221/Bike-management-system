@@ -1,22 +1,21 @@
 package com.cebp.fleet.vehicle;
 
-import com.cebp.fleet.common.AfterCommit;
 import com.cebp.fleet.common.BadRequestException;
 import com.cebp.fleet.common.ConflictException;
-import com.cebp.fleet.common.CorrelationIdFilter;
 import com.cebp.fleet.common.ErrorCode;
+import com.cebp.fleet.common.Geo;
 import com.cebp.fleet.common.IdGenerator;
 import com.cebp.fleet.common.NotFoundException;
 import com.cebp.fleet.config.FleetProperties;
-import com.cebp.fleet.event.EventPublisher;
 import com.cebp.fleet.event.Topics;
-import com.cebp.fleet.event.VehicleRegisteredEvent;
 import com.cebp.fleet.vehicle.dto.VehicleCreateRequest;
 import com.cebp.fleet.zone.ZoneAssigner;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
-import org.slf4j.MDC;
+import java.util.Map;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -31,25 +30,22 @@ public class VehicleService {
     private final VehicleRepository vehicles;
     private final ZoneAssigner zoneAssigner;
     private final IdGenerator ids;
-    private final EventPublisher publisher;
+    private final FleetState fleet;
+    private final MaintenanceService maintenance;
     private final Clock clock;
     private final FleetProperties props;
 
     public VehicleService(VehicleRepository vehicles, ZoneAssigner zoneAssigner, IdGenerator ids,
-                          EventPublisher publisher, Clock clock, FleetProperties props) {
+                          FleetState fleet, MaintenanceService maintenance, Clock clock, FleetProperties props) {
         this.vehicles = vehicles;
         this.zoneAssigner = zoneAssigner;
         this.ids = ids;
-        this.publisher = publisher;
+        this.fleet = fleet;
+        this.maintenance = maintenance;
         this.clock = clock;
         this.props = props;
     }
 
-    /**
-     * Creates the vehicle as AVAILABLE and publishes VehicleRegistered after commit.
-     * Note: a battery under the rentable minimum is stored as given; the low-battery
-     * maintenance rules (BR-08) arrive with the telemetry work in Week 3.
-     */
     @Transactional
     public Vehicle register(VehicleCreateRequest request) {
         String label = request.label().trim();
@@ -57,7 +53,7 @@ public class VehicleService {
             throw duplicateLabel(label);
         }
 
-        Instant now = clock.instant();
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         String zoneId = zoneAssigner.zoneIdFor(request.latitude(), request.longitude());
         Vehicle vehicle = Vehicle.register(ids.nextVehicleId(), label, request.type(),
                 request.batteryPercent(), request.latitude(), request.longitude(), zoneId, now);
@@ -72,9 +68,11 @@ public class VehicleService {
             throw e;
         }
 
-        VehicleRegisteredEvent event = VehicleRegisteredEvent.from(
-                ids.nextEventId(), vehicle, MDC.get(CorrelationIdFilter.MDC_KEY), now);
-        AfterCommit.run(() -> publisher.publish(Topics.FLEET_VEHICLE, vehicle.getId(), event));
+        maintenance.applyBattery(vehicle, now);
+        fleet.emit(Topics.FLEET_VEHICLE, "VehicleRegistered", vehicle, now, Map.of(
+                "batteryPercent", vehicle.getBatteryPercent(), "latitude", vehicle.getLatitude(),
+                "longitude", vehicle.getLongitude(), "batteryMeasuredAt", vehicle.getLastBatteryAt(),
+                "locationMeasuredAt", vehicle.getLastLocationAt()));
         return vehicle;
     }
 
@@ -86,10 +84,7 @@ public class VehicleService {
 
     @Transactional(readOnly = true)
     public List<Vehicle> list(VehicleStatus status, String zoneId, Integer maxBattery, Integer limit) {
-        int effectiveLimit = limit == null ? props.listDefaultLimit() : limit;
-        if (effectiveLimit < 1 || effectiveLimit > props.listMaxLimit()) {
-            throw new BadRequestException("limit", "must be between 1 and " + props.listMaxLimit());
-        }
+        int effectiveLimit = fleet.limit(limit);
         if (maxBattery != null && (maxBattery < 0 || maxBattery > 100)) {
             throw new BadRequestException("maxBattery", "must be between 0 and 100");
         }
@@ -108,10 +103,36 @@ public class VehicleService {
         return vehicles.findAll(spec, PageRequest.of(0, effectiveLimit, Sort.by("id"))).getContent();
     }
 
+    record Nearby(Vehicle vehicle, double distanceMeters) {}
+
+    @Transactional(readOnly = true)
+    public List<Nearby> nearby(double lat, double lon, Integer radiusMeters, Integer minBattery, Integer limit) {
+        if (!Double.isFinite(lat) || Math.abs(lat) > 90) throw new BadRequestException("lat", "must be between -90 and 90");
+        if (!Double.isFinite(lon) || Math.abs(lon) > 180) throw new BadRequestException("lon", "must be between -180 and 180");
+        int radius = radiusMeters == null ? props.nearbyDefaultRadiusMeters() : radiusMeters;
+        if (radius < 1 || radius > props.nearbyMaxRadiusMeters()) {
+            throw new BadRequestException("radiusMeters", "must be between 1 and " + props.nearbyMaxRadiusMeters());
+        }
+        if (minBattery != null && (minBattery < 0 || minBattery > 100)) {
+            throw new BadRequestException("minBattery", "must be between 0 and 100");
+        }
+        int effectiveLimit = fleet.limit(limit);
+        int threshold = minBattery == null ? props.minRentableBatteryPercent()
+                : Math.max(minBattery, props.minRentableBatteryPercent());
+        double latitudeDelta = Geo.latitudeDelta(radius);
+        return vehicles.findByStatusAndBatteryPercentGreaterThanEqualAndLatitudeBetween(
+                        VehicleStatus.AVAILABLE, threshold, lat - latitudeDelta, lat + latitudeDelta).stream()
+                .map(v -> new Nearby(v, Geo.distanceMeters(lat, lon, v.getLatitude(), v.getLongitude())))
+                .filter(candidate -> candidate.distanceMeters() <= radius)
+                .sorted(Comparator.comparingDouble(Nearby::distanceMeters)
+                        .thenComparing(candidate -> candidate.vehicle().getId()))
+                .limit(effectiveLimit).toList();
+    }
+
     /** Only the label can be changed; status, battery and location are system-controlled. */
     @Transactional
     public Vehicle rename(String id, String newLabel) {
-        Vehicle vehicle = get(id);
+        Vehicle vehicle = fleet.lockVehicle(id);
         String label = newLabel.trim();
         if (label.equals(vehicle.getLabel())) {
             return vehicle;

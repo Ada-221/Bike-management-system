@@ -27,7 +27,7 @@ export async function fixture(t, options = {}) {
   t.after(() => rm(directory, { recursive: true, force: true }));
   const store = createJsonStore(directory, options.storage);
   const clock = options.clock ?? (() => new Date(NOW));
-  const projection = await createProjection({ store, clock, backendContract: DRAFT_CONTRACT });
+  const projection = await createProjection({ store, clock, backendContract: options.backendContract ?? DRAFT_CONTRACT });
   const service = createService({ snapshotProvider: projection, store, clock, areaMap: { area_center: "zone_001", area_south: "zone_002" } });
   async function confirm() {
     const state = await projection.inspect();

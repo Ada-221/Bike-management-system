@@ -1,5 +1,4 @@
-// Backend events are FIXTURES while owner contracts are pending. Real Java
-// telemetry is exercised; this does not claim backend-producer acceptance.
+// Exercise real REST and telemetry producers with isolated Compose volumes.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -11,7 +10,7 @@ const project = `week3-smoke-${Date.now()}-${process.pid}`;
 const output = path.join(root, 'build', project);
 mkdirSync(output, { recursive: true });
 const override = path.join(output, 'override.yaml');
-writeFileSync(override, `services:\n${['postgres', 'kafka', 'fleet-management-service', 'operator-dashboard', 'ai-mcp-schema-viewer', 'ai-mcp-service'].map(s => `  ${s}:\n    ports: !reset []${s === 'ai-mcp-service' ? '\n    environment:\n      MCP_BACKEND_EVENT_CONTRACT: person5-week3-draft-v1\n      MCP_AREA_ZONE_MAP_JSON: \'{"area_center":"zone_001","area_south":"zone_002"}\'' : ''}`).join('\n')}\n`);
+writeFileSync(override, `services:\n${['postgres', 'kafka', 'fleet-management-service', 'operator-dashboard', 'ai-mcp-schema-viewer', 'ai-mcp-service'].map(s => `  ${s}:\n    ports: !reset []${s === 'ai-mcp-service' ? '\n    environment:\n      MCP_BACKEND_EVENT_CONTRACT: fleet-week3-v1\n      MCP_AREA_ZONE_MAP_JSON: \'{"area_center":"zone_001","area_south":"zone_002"}\'' : ''}`).join('\n')}\n`);
 const base = ['compose', '--project-name', project, '--env-file', '.env.example', '-f', 'compose.yaml', '-f', override];
 let sequence = 0;
 async function compose(args, { allowFailure = false } = {}) {
@@ -34,11 +33,14 @@ try {
   await compose(['--profile', 'telemetry', 'build']);
   await compose(['up', '-d', '--wait', '--wait-timeout', '240']);
   await exercise('seed');
-  await compose(['--profile', 'telemetry', 'run', '-d', '--name', `${project}-simulator`, '-e', 'TELEMETRY_SIMULATOR_ENABLED=true', 'telemetry']);
-  await exercise('telemetry');
-  await compose(['stop', 'fleet-management-service']);
+  const simulator = ['--profile', 'telemetry', 'run', '--rm', '-e', 'TELEMETRY_SIMULATOR_ENABLED=true',
+    '-e', 'SPRING_MAIN_WEB_APPLICATION_TYPE=none'];
+  await compose([...simulator, 'telemetry']);
+  await exercise('rent');
+  await compose([...simulator, '-e', 'TELEMETRY_SIMULATOR_SCENARIO=fault', 'telemetry']);
+  await exercise('fault-return');
   await exercise('verify');
-  console.log('Passed Kafka queries with backend stopped; checking restart and outage.');
+  console.log('Passed real rental, fault, and return; checking restart and broker outage.');
   await compose(['restart', 'ai-mcp-service']);
   await compose(['up', '-d', '--no-deps', '--wait', '--wait-timeout', '90', 'ai-mcp-service']);
   await exercise('verify');
@@ -48,11 +50,13 @@ try {
   await compose(['up', '-d', '--wait', '--wait-timeout', '90', 'kafka']);
   await compose(['up', '-d', '--no-deps', '--wait', '--wait-timeout', '90', 'ai-mcp-service']);
   await exercise('verify');
+  await compose(['stop', 'fleet-management-service']);
+  await exercise('verify');
   await compose(['stop', 'ai-mcp-service']);
   await compose(['run', '--rm', '--no-deps', 'ai-mcp-service', 'npm', 'run', 'rebuild']);
   await compose(['up', '-d', '--no-deps', '--wait', '--wait-timeout', '90', 'ai-mcp-service']);
   await exercise('verify');
-  writeFileSync(path.join(output, 'result.txt'), 'PASS: Kafka fixture projection, real Java telemetry, backend stopped, restart/deduplication, outage/recovery, offline rebuild equivalence, advisory approval preserved. Real backend producer integration BLOCKED on Persons 1/2.\n');
+  writeFileSync(path.join(output, 'result.txt'), 'PASS: real fleet REST and telemetry, mid-trip fault and return, dashboard proxy, outbox recovery, backend-independent MCP, restart and rebuild, advisory approval preserved.\n');
   console.log(`PASS ${project}; evidence: ${output}`);
 } catch (error) {
   writeFileSync(path.join(output, 'result.txt'), `FAIL: ${error.stack}\n`);

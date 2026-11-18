@@ -16,6 +16,10 @@ public final class Geo {
         double dLambda = Math.toRadians(lon2 - lon1);
         double a = Math.sin(dPhi / 2) * Math.sin(dPhi / 2)
                 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
-        return 2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(a));
+        return 2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(Math.min(1, a)));
+    }
+
+    public static double latitudeDelta(double distanceMeters) {
+        return Math.toDegrees(distanceMeters / EARTH_RADIUS_METERS);
     }
 }

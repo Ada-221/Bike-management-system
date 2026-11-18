@@ -86,9 +86,9 @@ export function createService({ snapshotProvider, areaMap = {}, store, clock = (
         const candidates = vehicles.filter((v) => v.batteryPercent <= args.thresholdPercent);
         const selected = candidates.map((v) => {
           const areas = Object.entries(areaMap).filter(([, zoneId]) => zoneId === v.zoneId).map(([areaId]) => areaId);
-          if (areas.length !== 1 || !areaIdPattern.test(areas[0] ?? "")) throw new ServiceError("READ_MODEL_UNAVAILABLE", `Low-battery vehicle '${v.id}' has no unique configured area mapping`, true);
+          if (v.zoneId !== null && (areas.length !== 1 || !areaIdPattern.test(areas[0] ?? ""))) throw new ServiceError("READ_MODEL_UNAVAILABLE", `Low-battery vehicle '${v.id}' has no unique configured area mapping`, true);
           if (!vehicleIdPattern.test(v.id ?? "")) throw new ServiceError("READ_MODEL_UNAVAILABLE", `Vehicle '${v.id}' has no configured public vehicle ID`, true);
-          return { vehicleId: v.id, areaId: areas[0], batteryPercent: v.batteryPercent, operationalStatus: statusForMcp(v.status), batteryMeasuredAt: v.lastBatteryAt };
+          return { vehicleId: v.id, areaId: areas[0] ?? null, batteryPercent: v.batteryPercent, operationalStatus: statusForMcp(v.status), batteryMeasuredAt: v.lastBatteryAt };
         })
           .sort((a, b) => a.batteryPercent - b.batteryPercent || a.vehicleId.localeCompare(b.vehicleId));
         const selectedPage = page(selected, args, snapshotId);
@@ -123,7 +123,8 @@ export function createService({ snapshotProvider, areaMap = {}, store, clock = (
       const result = await callTool("list_low_battery_vehicles", { ...toolArgs, ...(cursor ? { cursor } : {}) });
       if (result.error) throw new ServiceError(result.error.code, result.error.message, result.error.retryable);
       results.push(result);
-      candidates.push(...result.vehicles.filter((v) => v.operationalStatus === "AVAILABLE").map((v) => ({ ...v, readModelAsOf: result.readModelAsOf })));
+      candidates.push(...result.vehicles.filter((v) => v.operationalStatus === "AVAILABLE" && v.areaId !== null)
+        .map((v) => ({ ...v, readModelAsOf: result.readModelAsOf })));
       cursor = result.pagination.nextCursor;
     } while (cursor && candidates.length < 5);
     const asOf = results[0].readModelAsOf;

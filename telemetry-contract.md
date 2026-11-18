@@ -30,17 +30,18 @@ event shapes.
 
 Consumers track the most recent accepted `measuredAt` separately for battery
 and location. A newer battery event does not make a location event stale, or
-vice versa. How distinct events with equal measurement times are ordered is
-still open and must not be assumed by a consumer.
+vice versa. Each field compares events by `(measuredAt, publishedAt, eventId)`.
+The greatest tuple wins.
+
+`VehicleFaultReported` uses the same envelope and vehicle key on `fleet.vehicle`.
+It carries a required nonblank `faultCode` and an optional nonblank description.
+See the [fault schema](fault.schema.json) and [example](fault-example.json).
 
 ## Still open
 
 - The `OFFLINE` timeout and evidence rule.
-- Fault description requiredness and blank/length rules, fault code list,
-  repeated-fault behavior, and resolution event.
+- A shared fault code list.
 - Kafka retention, retry, dead-letter, and complete producer/consumer details.
-- Exact handling of equal measurement timestamps.
 
 See the [integration decision register](integration-review.md) for owners and
-the rest of the unresolved integration decisions. This file does not settle
-fault payload validation or those operational policies.
+the rest of the unresolved integration decisions.

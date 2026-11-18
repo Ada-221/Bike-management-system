@@ -1,5 +1,9 @@
 # Fleet Service: Events Published and Consumed
 
+The [Week 3 event contract](../../contracts/fleet/v1/README.md) defines the
+current fleet outbox envelopes and telemetry routing. The examples below
+describe the original Week 1 drafts.
+
 ## 1. Events Published
 
 **Topics:** `fleet.vehicle`, `fleet.rental`, `fleet.maintenance`

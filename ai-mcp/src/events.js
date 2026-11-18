@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 export const TOPICS = ["fleet.vehicle", "fleet.rental", "fleet.maintenance"];
 export const DRAFT_CONTRACT = "person5-week3-draft-v1";
+export const FLEET_CONTRACT = "fleet-week3-v1";
 const routes = {
   VehicleRegistered: "fleet.vehicle", VehicleStateUpdated: "fleet.vehicle",
   VehicleBatteryUpdated: "fleet.vehicle", VehicleLocationUpdated: "fleet.vehicle",
@@ -51,17 +52,46 @@ export function normalizeEvent({ topic, key, value }, { backendContract = "" } =
     if (event.eventType === "VehicleBatteryUpdated") requireValue(percent(p.batteryPercent) && Object.keys(p).length === 1, "Battery payload requires only batteryPercent (integer 0..100)");
     else requireValue(location(p) && Object.keys(p).length === 2, "Location payload requires only valid latitude and longitude");
   } else {
-    requireValue(backendContract === DRAFT_CONTRACT, `Backend event contract is gated; obtain Persons 1/2 agreement before enabling ${DRAFT_CONTRACT}`);
+    const current = backendContract === FLEET_CONTRACT;
+    requireValue(current || backendContract === DRAFT_CONTRACT, `Backend event contract is gated; configure ${FLEET_CONTRACT} after owner review`);
     requireValue(Number.isSafeInteger(event.stateRevision) && event.stateRevision >= 0, "stateRevision must be a nonnegative authoritative per-vehicle integer");
     requireValue(Object.keys(event).every((k) => ["eventId", "eventType", "schemaVersion", "vehicleId", "publishedAt", "stateRevision", "correlationId", "producer", "payload"].includes(k)), "Unexpected backend envelope field");
+    const validZone = id(p.zoneId, "zone") || (current && p.zoneId === null);
     if (event.eventType === "VehicleRegistered") {
-      requireValue(status(p.status) && id(p.zoneId, "zone") && percent(p.batteryPercent) && location(p) && timestamp(p.batteryMeasuredAt) && timestamp(p.locationMeasuredAt), "Registration requires full initial status, zone, battery, location and actual measurement timestamps");
+      requireValue(status(p.status) && validZone && percent(p.batteryPercent) && location(p) && timestamp(p.batteryMeasuredAt) && timestamp(p.locationMeasuredAt), "Registration requires full initial status, zone, battery, location and actual measurement timestamps");
       requireValue(Object.keys(p).every((k) => ["status", "zoneId", "batteryPercent", "latitude", "longitude", "batteryMeasuredAt", "locationMeasuredAt"].includes(k)), "Unexpected registration payload field");
     } else {
       requireValue(status(p.status), "State events require authoritative resulting status");
-      if (p.zoneId !== undefined) requireValue(id(p.zoneId, "zone"), "zoneId must be backend issued");
-      requireValue(Object.keys(p).every((k) => ["status", "zoneId"].includes(k)), "Unexpected state payload field");
+      if (current || p.zoneId !== undefined) requireValue(validZone, "zoneId must be backend issued or explicitly null");
+      if (current) validateFleetDetails(event.eventType, p);
+      else requireValue(Object.keys(p).every((k) => ["status", "zoneId"].includes(k)), "Unexpected state payload field");
     }
   }
   return { ...event, digest: fingerprint({ topic, event }) };
+}
+
+function validateFleetDetails(type, p) {
+  let details = [];
+  if (type === "RentalStarted" || type === "RentalEnded") {
+    requireValue(id(p.rentalId, "rnt") && typeof p.riderId === "string" && p.riderId.length > 0
+      && timestamp(p.startedAt), "Invalid rental identity or start timestamp");
+    details = ["rentalId", "riderId", "startedAt"];
+    if (type === "RentalStarted") {
+      requireValue(location({ latitude: p.startLatitude, longitude: p.startLongitude }) && percent(p.startBatteryPercent), "Invalid rental start snapshot");
+      details.push("startLatitude", "startLongitude", "startBatteryPercent");
+    } else {
+      requireValue(location({ latitude: p.endLatitude, longitude: p.endLongitude }) && percent(p.endBatteryPercent)
+        && timestamp(p.endedAt) && Number.isSafeInteger(p.durationSeconds) && p.durationSeconds >= 0, "Invalid rental return snapshot");
+      if (Object.hasOwn(p, "locationMeasuredAt")) requireValue(timestamp(p.locationMeasuredAt), "Invalid return location timestamp");
+      details.push("endLatitude", "endLongitude", "endBatteryPercent", "endedAt", "durationSeconds", "locationMeasuredAt");
+    }
+  }
+  if (type === "VehicleMaintenanceChanged") {
+    const statuses = ["OPEN", "IN_PROGRESS", "RESOLVED"];
+    requireValue(id(p.maintenanceId, "mnt") && ["FAULT", "MANUAL", "LOW_BATTERY"].includes(p.reason)
+      && (p.previousStatus === null || statuses.includes(p.previousStatus)) && statuses.includes(p.newStatus)
+      && (p.faultCode === null || typeof p.faultCode === "string") && timestamp(p.changedAt), "Invalid maintenance transition");
+    details = ["maintenanceId", "reason", "previousStatus", "newStatus", "faultCode", "changedAt"];
+  }
+  requireValue(Object.keys(p).every((k) => ["status", "zoneId", ...details].includes(k)), "Unexpected state payload field");
 }

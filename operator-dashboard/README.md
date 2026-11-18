@@ -1,6 +1,7 @@
 # Operator dashboard
 
-Week 2 integration retains fixture data; no live fleet or proposal API is wired.
+The UI uses fixture data. In Compose, the same dashboard origin serves the
+live fleet backend at `/api/v1/` for the dashboard data integration.
 Playwright uses its installed Chromium by default (`npx playwright install chromium`).
 For local Edge, set `PLAYWRIGHT_CHANNEL=msedge` (PowerShell:
 `$env:PLAYWRIGHT_CHANNEL='msedge'`) before `npm test`. CI installs Chromium.

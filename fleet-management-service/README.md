@@ -48,9 +48,25 @@ To see error bodies and status codes, use `curl.exe -i` with the JSON in a file:
 
 Registering the same label twice returns `409 DUPLICATE_VEHICLE_LABEL`; an unknown
 ID returns `404 NOT_FOUND`; bad input returns `400 VALIDATION_ERROR`.
-The `VehicleRegistered` event is written to the service log (no Kafka yet).
+Run the Compose smoke for the complete nearby, rental, fault, and return flow.
+Compose enables Kafka delivery by default. When running Spring Boot directly,
+set `FLEET_KAFKA_ENABLED=true` and point `KAFKA_BOOTSTRAP_SERVERS` at a broker
+with all three fleet topics.
 
 ## Database
 
 Flyway runs `src/main/resources/db/migration` on startup. Never edit an applied
 migration; add a new `V<n>__name.sql` instead.
+
+For a Week 2 upgrade, back up the database and Kafka history. Keep telemetry
+paused while V3 migrates existing vehicles and queues one registration snapshot
+for each of them. Start the fleet service to drain the outbox, then activate the
+reviewed MCP adapter and resume telemetry. Inspect existing topics for
+complete retained history. Use the documented MCP offline rebuild for a
+preexisting projection. Keep the database with its outbox and avoid deleting
+Kafka history that an independent projection needs for replay.
+
+Outbox publish failures log the oldest pending age in seconds. The fleet API
+can still commit while Kafka is unavailable. Delivery retries with the original
+event ID after the broker recovers. On Docker 29, a local Maven test run may
+require `mvn "-Dapi.version=1.44" verify`.

@@ -1,13 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "VehicleFaultReported — Draft",
+  "title": "VehicleFaultReported v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "eventId",
     "eventType",
     "schemaVersion",
-    "timestamp",
+    "measuredAt",
+    "publishedAt",
     "vehicleId",
     "correlationId",
     "producer",
@@ -16,7 +17,7 @@
   "properties": {
     "eventId": {
       "type": "string",
-      "minLength": 1
+      "pattern": "^evt_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
     },
     "eventType": {
       "const": "VehicleFaultReported"
@@ -24,39 +25,45 @@
     "schemaVersion": {
       "const": "1.0"
     },
-    "timestamp": {
+    "measuredAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "publishedAt": {
       "type": "string",
       "format": "date-time",
       "pattern": "Z$"
     },
     "vehicleId": {
       "type": "string",
-      "pattern": "^veh_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"
+      "pattern": "^veh_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
     },
     "correlationId": {
       "type": "string",
       "minLength": 1
     },
     "producer": {
-      "type": "string",
-      "minLength": 1
+      "const": "telemetry-ingestion-service"
     },
     "payload": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "faultCode",
-        "description"
+        "faultCode"
       ],
       "properties": {
         "faultCode": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 50
+          "maxLength": 50,
+          "pattern": "\\S"
         },
         "description": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "\\S"
         }
       }
     }

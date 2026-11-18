@@ -46,7 +46,10 @@
       "required": ["vehicleId", "areaId", "batteryPercent", "operationalStatus", "batteryMeasuredAt"],
       "properties": {
         "vehicleId": { "$ref": "#/$defs/vehicleId" },
-        "areaId": { "$ref": "#/$defs/areaId" },
+        "areaId": {
+          "description": "Null when the fleet service reports that the vehicle is outside all assigned zones.",
+          "oneOf": [{ "$ref": "#/$defs/areaId" }, { "type": "null" }]
+        },
         "batteryPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
         "operationalStatus": { "enum": ["AVAILABLE", "IN_USE", "MAINTENANCE", "OFFLINE"] },
         "batteryMeasuredAt": { "$ref": "#/$defs/utcTimestamp" }

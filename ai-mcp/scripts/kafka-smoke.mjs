@@ -1,76 +1,143 @@
-// Runs INSIDE ai-mcp-service, on a fresh isolated broker only. Backend events
-// are explicit fixtures pending owner agreement; telemetry uses its real Java producer.
+// Runs inside an isolated Compose stack. All fleet mutations use the real REST and telemetry producers.
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
-import { Kafka, logLevel } from "kafkajs";
 import { toolSchemas, validate } from "../src/contract.js";
-import { DRAFT_CONTRACT } from "../src/events.js";
+import { FLEET_CONTRACT } from "../src/events.js";
 
-assert.equal(process.env.MCP_BACKEND_EVENT_CONTRACT, DRAFT_CONTRACT, "Fixture smoke requires explicit draft-contract opt-in");
-const base = "http://127.0.0.1:8083";
+assert.equal(process.env.MCP_BACKEND_EVENT_CONTRACT, FLEET_CONTRACT);
+const mcp = "http://127.0.0.1:8083";
+const fleet = "http://fleet-management-service:8080/api/v1";
+const dashboard = "http://operator-dashboard/api/v1";
 const file = "/data/smoke-evidence.json";
-const mode = process.argv[2] ?? "seed";
-const kafka = new Kafka({ clientId: "mcp-fixture-smoke", brokers: ["kafka:9092"], logLevel: logLevel.ERROR });
+const mode = process.argv[2];
+const key = "fleet-smoke-rental-1";
+const riderId = "rider-smoke";
+const center = { areaId: "area_center" };
+
+async function request(base, path, { method = "GET", body, expected = 200, headers = {} } = {}) {
+  const response = await fetch(base + path, {
+    method,
+    headers: { "content-type": "application/json", ...headers },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const text = await response.text();
+  assert.equal(response.status, expected, `${method} ${path}: ${text}`);
+  return JSON.parse(text);
+}
+
 async function call(name, args) {
-  const response = await fetch(`${base}/mcp`, { method: "POST", headers: { "content-type": "application/json", "MCP-Protocol-Version": "2026-07-28" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" }, params: { name, arguments: { schemaVersion: "1.0", maxReadModelAgeSeconds: 300, pageSize: 100, ...args } } }) });
-  const result = (await response.json()).result.structuredContent;
+  const rpc = await request(mcp, "/mcp", {
+    method: "POST", headers: { "MCP-Protocol-Version": "2026-07-28" },
+    body: { jsonrpc: "2.0", id: 1, method: "tools/call",
+      _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" },
+      params: { name, arguments: { schemaVersion: "1.0", maxReadModelAgeSeconds: 300, pageSize: 100, ...args } } },
+  });
+  const result = rpc.result?.structuredContent;
+  assert.ok(result, JSON.stringify(rpc));
   assert.deepEqual(validate(result, toolSchemas.get(name).output), []);
   return result;
 }
+
 async function waitFor(predicate) {
   const deadline = Date.now() + 60000;
-  while (Date.now() < deadline) { if (await predicate()) return; await delay(250); }
-  throw new Error("Timed out waiting for Kafka projection: " + JSON.stringify(await (await fetch(`${base}/ready`)).json()));
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await delay(250);
+  }
+  throw new Error("Timed out waiting for integrated state: " + await (await fetch(mcp + "/ready")).text());
 }
-async function send(events) {
-  const producer = kafka.producer(); await producer.connect();
-  try {
-    for (const e of events) await producer.send({ topic: e.eventType.startsWith("Rental") ? "fleet.rental" : e.eventType === "VehicleMaintenanceChanged" ? "fleet.maintenance" : "fleet.vehicle", messages: [{ key: e.vehicleId, value: JSON.stringify(e) }] });
-  } finally { await producer.disconnect(); }
+
+const availability = (args = {}) => call("get_vehicle_availability_by_area", { ...center, ...args });
+const low = (thresholdPercent = 100) => call("list_low_battery_vehicles", { thresholdPercent });
+const vehicle = (id, base = fleet) => request(base, "/vehicles/" + id);
+const register = (label, batteryPercent, latitude = 48.21, longitude = 16.36) => request(fleet, "/vehicles", {
+  method: "POST", expected: 201, body: { label, batteryPercent, type: "E_BIKE", latitude, longitude },
+});
+const save = (value) => writeFile(file, JSON.stringify(value));
+const find = (result, id) => result.vehicles?.find((v) => v.vehicleId === id);
+async function assertParkedLocation(id) {
+  const { projection } = JSON.parse(await readFile("/data/state.json"));
+  const parked = projection.confirmed.vehicles.find((v) => v.id === id);
+  assert.equal(parked.zoneId, null);
+  assert.deepEqual([parked.latitude, parked.longitude], [48.24, 16.40]);
 }
+
 if (mode === "seed") {
-  const now = new Date().toISOString();
-  const common = { schemaVersion: "1.0", publishedAt: now, correlationId: "corr_smoke", producer: "fleet-management-service" };
-  const registration = (vehicleId, batteryPercent) => ({ ...common, eventId: `evt_register_${vehicleId}`, eventType: "VehicleRegistered", vehicleId, stateRevision: 1, payload: { status: "AVAILABLE", zoneId: "zone_001", batteryPercent, latitude: 48.21, longitude: 16.35, batteryMeasuredAt: "2026-11-01T00:00:00Z", locationMeasuredAt: "2026-11-01T00:00:01Z" } });
-  const events = [registration("veh_001", 12), registration("veh_002", 5),
-    { ...common, eventId: "evt_rental_start", eventType: "RentalStarted", vehicleId: "veh_002", stateRevision: 2, payload: { status: "RENTED" } },
-    { ...common, eventId: "evt_maintenance", eventType: "VehicleMaintenanceChanged", vehicleId: "veh_002", stateRevision: 3, payload: { status: "MAINTENANCE_REQUIRED" } }];
-  await send(events);
-  await waitFor(async () => (await call("list_low_battery_vehicles", { thresholdPercent: 20 })).vehicles?.length === 2);
-  const proposalResponse = await fetch(`${base}/api/v1/planner/runs`, { method: "POST" });
-  const { proposal } = await proposalResponse.json(); assert.ok(proposal);
-  const approved = await (await fetch(`${base}/api/v1/proposals/${proposal.proposalId}/approve`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operatorId: "operator_smoke" }) })).json();
-  assert.equal(approved.operationalStateChanged, false);
+  const working = await register("SMOKE-RENT", 92);
+  assert.equal(working.id, "veh_001");
+  const charging = await register("SMOKE-CHARGE", 12);
+  const plannerCandidate = await register("SMOKE-PLANNER", 25, 48.1858, 16.3758);
+  assert.equal(charging.status, "MAINTENANCE_REQUIRED");
+  await waitFor(async () => find(await availability(), working.id)?.batteryPercent === 92
+    && find(await low(20), charging.id)?.operationalStatus === "MAINTENANCE"
+    && find(await low(29), plannerCandidate.id)?.operationalStatus === "AVAILABLE");
+
+  const { proposal } = await request(mcp, "/api/v1/planner/runs", { method: "POST", expected: 202 });
+  assert.ok(proposal);
+  const approved = await request(mcp, `/api/v1/proposals/${proposal.proposalId}/approve`, {
+    method: "POST", body: { operatorId: "operator_smoke" },
+  });
   assert.equal(approved.status, "APPROVED");
-  const low = await call("list_low_battery_vehicles", { thresholdPercent: 20 });
-  assert.equal(low.vehicles.find((v) => v.vehicleId === "veh_001").operationalStatus, "AVAILABLE");
-  await writeFile(file, JSON.stringify({ events, proposalId: proposal.proposalId }));
+  assert.equal(approved.operationalStateChanged, false);
+  await save({ workingId: working.id, chargingId: charging.id, proposalId: proposal.proposalId });
 } else {
   const evidence = JSON.parse(await readFile(file));
-  if (mode === "telemetry") {
-    await waitFor(async () => (await call("get_vehicle_availability_by_area", { areaId: "area_center" })).vehicles?.[0]?.batteryPercent === 74);
-    const result = await call("get_vehicle_availability_by_area", { areaId: "area_center" });
-    assert.equal(result.availableCount, 1); assert.equal(result.vehicles[0].availableSince, null);
-    assert.deepEqual(result.vehicles[0].location, { latitude: 48.2104, longitude: 16.36 });
-    evidence.vehicles = result.vehicles; await writeFile(file, JSON.stringify(evidence));
+  const { workingId, chargingId } = evidence;
+  if (mode === "rent") {
+    await waitFor(async () => {
+      const [api, model] = await Promise.all([vehicle(workingId, dashboard), availability()]);
+      return api.batteryPercent === 74 && api.latitude === 48.2104 && find(model, workingId)?.batteryPercent === 74;
+    });
+    const nearby = await request(fleet, "/vehicles/nearby?lat=48.21&lon=16.36");
+    assert.deepEqual(nearby.map((v) => v.id), [workingId]);
+    const options = { method: "POST", body: { vehicleId: workingId, riderId }, headers: { "Idempotency-Key": key } };
+    const rental = await request(fleet, "/rentals", { ...options, expected: 201 });
+    assert.deepEqual(await request(fleet, "/rentals", options), rental);
+    await waitFor(async () => find(await low(), workingId)?.operationalStatus === "IN_USE");
+    assert.equal(find(await availability(), workingId), undefined);
+    await save({ ...evidence, rentalId: rental.id });
+  } else if (mode === "fault-return") {
+    await waitFor(async () => (await vehicle(workingId, dashboard)).status === "MAINTENANCE_REQUIRED"
+      && find(await low(), workingId)?.operationalStatus === "MAINTENANCE");
+    assert.equal((await request(dashboard, "/fleet/status")).activeRentals, 1);
+    assert.deepEqual(await request(fleet, "/vehicles/nearby?lat=48.21&lon=16.36"), []);
+    const recovered = await request(fleet, `/rentals?riderId=${riderId}&status=ACTIVE`);
+    assert.deepEqual(recovered.map((trip) => trip.id), [evidence.rentalId]);
+    const path = `/rentals/${evidence.rentalId}/return`;
+    const returned = await request(fleet, path, { method: "POST", body: { latitude: 48.24, longitude: 16.40 } });
+    assert.equal(returned.status, "COMPLETED");
+    assert.deepEqual(await request(fleet, path, { method: "POST", body: { latitude: 48.21, longitude: 16.36 } }), returned);
+    const parked = await vehicle(workingId);
+    assert.equal(parked.zoneId, null);
+    assert.equal(parked.status, "MAINTENANCE_REQUIRED");
+    assert.equal((await request(dashboard, "/fleet/status")).activeRentals, 0);
+    await waitFor(async () => {
+      const result = find(await low(), workingId);
+      return result?.areaId === null && result.operationalStatus === "MAINTENANCE";
+    });
+    await assertParkedLocation(workingId);
+    evidence.vehicleState = (await low()).vehicles;
+    await save(evidence);
   } else if (mode === "outage") {
-    await waitFor(async () => (await fetch(`${base}/ready`)).status === 503);
-    const first = await call("get_vehicle_availability_by_area", { areaId: "area_center" });
-    assert.deepEqual(first.vehicles, evidence.vehicles);
+    await waitFor(async () => (await fetch(mcp + "/ready")).status === 503);
+    const first = await availability();
+    assert.deepEqual(first.vehicles, []);
     await delay(2500);
-    const second = await call("get_vehicle_availability_by_area", { areaId: "area_center" });
-    assert.equal(second.readModelAsOf, first.readModelAsOf);
-    assert.equal((await call("get_vehicle_availability_by_area", { areaId: "area_center", maxReadModelAgeSeconds: 0 })).error.code, "STALE_READ_MODEL");
+    assert.equal((await availability()).readModelAsOf, first.readModelAsOf);
+    assert.equal((await availability({ maxReadModelAgeSeconds: 0 })).error.code, "STALE_READ_MODEL");
+    const queued = await register("SMOKE-OUTBOX", 85);
+    await save({ ...evidence, queuedId: queued.id });
   } else if (mode === "verify") {
-    await send(evidence.events); // IDs preserved, including registration after newer telemetry.
-    await waitFor(async () => (await fetch(`${base}/ready`)).ok);
-    const result = await call("get_vehicle_availability_by_area", { areaId: "area_center" });
-    assert.deepEqual(result.vehicles, evidence.vehicles);
-    const proposal = await (await fetch(`${base}/api/v1/proposals/${evidence.proposalId}`)).json();
-    assert.equal(proposal.status, "APPROVED"); assert.equal(proposal.operationalStateChanged, false);
-    const low = await call("list_low_battery_vehicles", { thresholdPercent: 20 });
-    assert.deepEqual(low.vehicles.map((v) => [v.vehicleId, v.operationalStatus]), [["veh_002", "MAINTENANCE"]]);
+    await waitFor(async () => (await fetch(mcp + "/ready")).ok
+      && (!evidence.queuedId || find(await availability(), evidence.queuedId)?.batteryPercent === 85));
+    const result = await low();
+    assert.deepEqual(result.vehicles.filter((v) => v.vehicleId !== evidence.queuedId), evidence.vehicleState);
+    await assertParkedLocation(workingId);
+    assert.equal(find(result, chargingId)?.operationalStatus, "MAINTENANCE");
+    const proposal = await request(mcp, "/api/v1/proposals/" + evidence.proposalId);
+    assert.equal(proposal.status, "APPROVED");
+    assert.equal(proposal.operationalStateChanged, false);
   } else throw new Error(`Unknown mode ${mode}`);
 }
-console.log(`PASS Kafka fixture smoke: ${mode}; backend producer integration remains gated.`);
+console.log(`PASS real fleet Kafka smoke: ${mode}`);

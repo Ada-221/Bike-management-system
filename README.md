@@ -13,6 +13,7 @@ charging and redistribution proposals.
 - [Week 1 implementation summary](docs/project/week-1-implementation.md)
 - [AI/MCP Week 1 contracts](contracts/ai-mcp/v1/README.md)
 - [AI/MCP Week 3 service and replay](ai-mcp/README.md)
+- [Week 3 fleet integration and verification](docs/integration/week-3-fleet-verification.md)
 - [Person 5 Week 3 implementation plan](docs/ai-mcp/week-3-implementation-plan.md)
 - [AI/MCP evaluation criteria](docs/ai-mcp/evaluation-criteria.md)
 - [AI/MCP test plan](docs/ai-mcp/test-plan.md)
@@ -38,26 +39,26 @@ the viewer image.
 
 MCP waits for Kafka and topic initialization and exposes projection readiness at
 <http://localhost:8083/ready>. It reads only its durable JSON Kafka projection.
-Configure `MCP_KAFKA_BROKERS` and a dedicated `MCP_KAFKA_GROUP_ID`; PostgreSQL,
-Kafka and MCP state have named volumes. Backend producer integration is gated
-pending Persons 1/2 agreement in [the handoff](integration-review.md).
+Configure `MCP_KAFKA_BROKERS` and a dedicated `MCP_KAFKA_GROUP_ID`. For an
+isolated local demo, set `MCP_BACKEND_EVENT_CONTRACT=fleet-week3-v1` in `.env`
+before registering vehicles. Shared activation requires the owner review
+recorded in the [integration register](integration-review.md).
 
 Telemetry is opt-in: see the [telemetry demo](telemetry-ingestion-service/README.md).
 The `telemetry` profile uses `kafka:9092`; its simulator stays disabled unless
 `TELEMETRY_SIMULATOR_ENABLED=true` is explicitly supplied.
 
-Rider demo mode remains the default. The backend does not implement nearby or
-rental endpoints required by the optional rider HTTP adapter. The dashboard
-continues to use fixtures. The MCP consumer is implemented; backend publication
-and owner-approved event contracts remain outstanding. Demand, OFFLINE rules
-and operational proposal execution remain deferred.
+The rider app can use nearby and rental endpoints by setting the
+[backend URL](rider-app/README.md). The dashboard's fixture UI has a same-origin
+route to the live fleet API at `http://localhost:8081/api/v1/` for its data
+integration. Demand, OFFLINE rules, and operational proposal execution remain
+deferred.
 
 Run `node scripts/compose-smoke.mjs` for a fresh isolated stack with no host port
-collisions. It uses draft backend fixtures and real telemetry, captures evidence
+collisions. It uses the actual fleet REST and telemetry producers, captures evidence
 under `build/week3-smoke-*`, and removes
 only its own uniquely named containers and test volumes. Existing developer
-volumes are preserved. See [Week 3 verification](docs/ai-mcp/week-3-verification.md)
-for current evidence and producer integration gates; Week 2 reports are historical.
+volumes are preserved.
 
 ## Safety boundary
 
