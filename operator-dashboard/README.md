@@ -1,9 +1,15 @@
 # Operator dashboard
 
-The Week 2 UI reads backend vehicles and fleet totals by default through
+The Week 3 UI reads backend vehicles and fleet totals by default through
 `/api/v1/vehicles?limit=500` and `/api/v1/fleet/status`. Select **Demo** in the
 data-source control for a disconnected synthetic demonstration. Failed API
 requests never silently fall back to demo data.
+
+Apply **Vehicle status** (including Available or Needs maintenance) and an optional
+inclusive **Maximum battery (%)** limit, then select a vehicle label for read-only
+details and open maintenance records. Filters affect the list; overview indicators
+always report the whole fleet. Navigation preserves applied filters. Draft edits
+take effect only after Apply; changing the data source clears filters and details.
 
 In Compose, the team's existing dashboard proxy serves the fleet API on the same
 origin. Vite development and production-preview servers now provide the same
@@ -12,7 +18,7 @@ Playwright uses its installed Chromium by default (`npx playwright install chrom
 For local Edge, set `PLAYWRIGHT_CHANNEL=msedge` (PowerShell:
 `$env:PLAYWRIGHT_CHANNEL='msedge'`) before `npm test`. CI installs Chromium.
 
-Person 3's Week 2 frontend builds on the Week 1 React/TypeScript skeleton and the
+Person 3's Week 3 frontend builds on the committed Week 2 API client and the
 integrated backend at `bac920b`. Exact dependency versions remain pinned in
 `package.json` and `package-lock.json`; no runtime dependency was added for the
 API client. The geographic map provider is still a later decision.
@@ -86,23 +92,26 @@ $env:PLAYWRIGHT_CHANNEL = 'msedge'
 npm.cmd run test:live
 ```
 
-This builds the actual backend and dashboard images and starts PostgreSQL using
-the frontend-owned `compose.smoke.yaml`. A unique Compose project and fresh
+This builds the actual backend, dashboard and Java telemetry images and starts
+PostgreSQL and Kafka using the frontend-owned `compose.smoke.yaml` plus
+`compose.telemetry-smoke.yaml`. A unique Compose project and fresh
 database volume keep developer data separate; only an ephemeral loopback port
 is exposed. The browser checks an empty fleet, registers synthetic test vehicles
-through the real proxy/API, refreshes, and verifies the list and fleet totals.
-The test stack disables Kafka because this check covers frontend REST integration.
+through the real proxy/API, verifies filters and details, and runs the actual
+Java telemetry simulator. It confirms that the new battery/location data reaches
+the backend through Kafka and is visible after manual refresh. It also checks a
+fault during an active rental without conflating RENTED vehicles and active trips.
 It also loads the actual Vite configuration and checks its development proxy
 against the running API. The runner captures logs and then removes only its own
 containers and volume.
-Evidence is saved under ignored `test-results/frontend-week2-*/`.
+Evidence is saved under ignored `test-results/frontend-week3-*/`.
 
 `npm.cmd run preview` serves the production build. `npm.cmd run format` formats
 the dashboard's source and documentation. These checks do not certify the complete
-distributed system, Kafka integration, a real map, SSE, full accessibility
+distributed system, Kafka failure/replay behavior, a real map, SSE, full accessibility
 compliance, or cross-browser support.
 
-## Week 2 contents
+## Week 2 foundation and Week 3 additions
 
 - Overview, Fleet, and Proposals navigation inside a responsive operator shell.
 - Backend vehicle list and fleet summary; an explicit demo source for offline use.
@@ -115,6 +124,12 @@ compliance, or cross-browser support.
   skip link. Narrow screens scroll the table within its own region.
 - Read-only vehicle and summary types matching the implemented fleet controllers,
   including prefixed IDs and independent battery/location measurement timestamps.
+- Server-side status and inclusive battery filters, with clear/reset and distinct
+  no-matches handling. Native form bounds and client validation reject invalid values.
+- Vehicle details dialog with type, status, rentability, area, coordinates,
+  independent measurement timestamps and unresolved maintenance records.
+- Separate detail/maintenance loading and retries, refresh, Escape handling, focus
+  restoration and a scrollable mobile layout. No maintenance-edit actions are exposed.
 
 ```text
 src/
@@ -122,6 +137,8 @@ src/
   api/fleet.ts                  Read-only REST client and boundary validation
   hooks/useFleetResource.ts     Independent data loading and cancellation
   components/FleetSnapshot.tsx   Shared vehicle snapshot from supplied data
+  components/FleetFilters.tsx    Applied status and maximum-battery form
+  components/VehicleDetails.tsx  Read-only vehicle/maintenance dialog
   contracts/fleet.ts            Implemented backend read shapes/source revision
   data/sampleFleet.ts           Explicit demo source
   main.tsx                      React entry point
@@ -133,17 +150,18 @@ tests/live-fleet.spec.ts        Real Docker/backend/proxy browser smoke
 
 Wireframes, scope, milestones, compatibility decisions, and verification results:
 [Week 1 handoff](../docs/frontend/week-1.md) and
-[Week 2 handoff](../docs/frontend/week-2.md).
+[Week 2 handoff](../docs/frontend/week-2.md), plus
+[Week 3 handoff](../docs/frontend/week-3.md).
 
 ## Planned integration boundaries
 
-Week 2 connects the list and summary so the client path is verifiable. Week 3 adds
+Week 2 connects the list and summary so the client path is verifiable. Week 3 implements
 availability/battery/maintenance filters and vehicle details. Week 4 adds SSE and
 proposal review. Week 5 completes resilience and polish. No EventSource,
 proposal persistence, operational actions, authentication, or router dependency
 was introduced. Navigation is local state and resets to Overview on reload.
 
-The client reads only vehicles and fleet status. It does not call the draft
+The client reads vehicles, fleet status and unresolved maintenance records. It does not call the draft
 `/zones` endpoint: names come from `/fleet/status`; absent names fall back to the
 actual zone ID and null zones display as unassigned. Counts come from the full
 summary, not the list capped at 500. A full list page is explicitly labelled as

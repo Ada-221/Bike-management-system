@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FleetSnapshot } from "./components/FleetSnapshot";
 import { ResourceNotice } from "./components/ResourceNotice";
 import { fleetApi } from "./api/fleet";
 import { demoFleet } from "./data/sampleFleet";
 import { useFleetResource } from "./hooks/useFleetResource";
+import { FleetFilters } from "./components/FleetFilters";
+import { VehicleDetails } from "./components/VehicleDetails";
+import type { VehicleFilters } from "./contracts/fleet";
 
 const sections = ["Overview", "Fleet", "Proposals"] as const;
 type Section = (typeof sections)[number];
@@ -81,8 +84,14 @@ function ProposalPreview() {
 export default function App() {
   const [section, setSection] = useState<Section>("Overview");
   const [mode, setMode] = useState<"api" | "demo">("api");
+  const [filters, setFilters] = useState<VehicleFilters>({});
+  const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const source = mode === "api" ? fleetApi : demoFleet;
-  const vehicles = useFleetResource(source.listVehicles);
+  const loadVehicles = useMemo(
+    () => (signal?: AbortSignal) => source.listVehicles(signal, filters),
+    [source, filters.status, filters.maxBattery],
+  );
+  const vehicles = useFleetResource(loadVehicles);
   const summary = useFleetResource(source.getStatus);
   const busy = vehicles.loading || summary.loading;
   const demo = mode === "demo";
@@ -106,6 +115,17 @@ export default function App() {
   ] as const;
   const fleetList = (
     <>
+      <FleetFilters key={mode} applied={filters} onApply={setFilters} />
+      <p className="filter-summary">
+        {filters.status
+          ? `Status: ${filters.status === "MAINTENANCE_REQUIRED" ? "Needs maintenance" : filters.status === "RENTED" ? "On a ride" : "Available"}`
+          : "All statuses"}{" "}
+        ·{" "}
+        {filters.maxBattery === undefined
+          ? "Any battery level"
+          : `Battery at or below ${filters.maxBattery}%`}
+        . Fleet indicators always show the full fleet.
+      </p>
       <ResourceNotice
         name="vehicles"
         loading={vehicles.loading}
@@ -119,6 +139,10 @@ export default function App() {
           zones={summary.data?.zones ?? []}
           total={summary.data?.totalVehicles}
           demo={demo}
+          filtered={
+            filters.status !== undefined || filters.maxBattery !== undefined
+          }
+          onSelect={setSelectedVehicle}
         />
       )}
       {vehicles.updatedAt && (
@@ -173,7 +197,7 @@ export default function App() {
             <br />
             One shared view.
           </p>
-          <span className="version">Week 02 / API foundation</span>
+          <span className="version">Week 03 / Fleet exploration</span>
         </div>
       </aside>
       <div className="workspace">
@@ -206,7 +230,7 @@ export default function App() {
                     : "A space to inspect suggestions and record operator decisions."}
               </p>
             </div>
-            <span className="milestone-tag">Week 2</span>
+            <span className="milestone-tag">Week 3</span>
           </div>
           <div className="preview-notice" role="note">
             <strong>{demo ? "Demo mode" : "Fleet snapshot"}</strong>
@@ -221,9 +245,11 @@ export default function App() {
             <select
               id="data-source"
               value={mode}
-              onChange={(event) =>
-                setMode(event.target.value as "api" | "demo")
-              }
+              onChange={(event) => {
+                setMode(event.target.value as "api" | "demo");
+                setFilters({});
+                setSelectedVehicle(null);
+              }}
             >
               <option value="api">Backend</option>
               <option value="demo">Demo</option>
@@ -275,10 +301,12 @@ export default function App() {
               {fleetList}
               <section className="panel future-panel">
                 <p className="eyebrow">Next milestones</p>
-                <h2>From a snapshot to live operations</h2>
+                <h2>Explore the fleet</h2>
                 <p>
-                  Availability, battery, and maintenance filters and vehicle
-                  details follow in Week 3; SSE updates follow in Week 4.
+                  Apply a status or battery filter, then select a vehicle to
+                  inspect its location, measurement times, and open maintenance
+                  records. Use Refresh to retrieve changes; automatic SSE
+                  updates follow in Week 4.
                 </p>
               </section>
             </>
@@ -304,9 +332,19 @@ export default function App() {
           )}
           <footer className="page-footer">
             <span>CEBP / E-bike & scooter fleet management</span>
-            <span>Person 3 · Frontend / Week 2</span>
+            <span>Person 3 · Frontend / Week 3</span>
           </footer>
         </main>
+        {selectedVehicle && (
+          <VehicleDetails
+            key={`${mode}:${selectedVehicle}`}
+            vehicleId={selectedVehicle}
+            source={source}
+            zones={summary.data?.zones ?? []}
+            demo={demo}
+            onClose={() => setSelectedVehicle(null)}
+          />
+        )}
       </div>
     </div>
   );

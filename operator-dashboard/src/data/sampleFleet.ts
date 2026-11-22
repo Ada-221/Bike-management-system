@@ -1,5 +1,5 @@
 import type { FleetStatus, Vehicle, Zone } from "../contracts/fleet";
-import type { FleetSource } from "../api/fleet";
+import { FleetApiError, type FleetSource } from "../api/fleet";
 
 // Synthetic, fixed snapshots. No backend, telemetry, or MCP connection.
 export const sampleZones = [
@@ -96,6 +96,39 @@ export function sampleStatus(): FleetStatus {
 
 // Selected explicitly by the operator; never used as a fallback for API errors.
 export const demoFleet: FleetSource = {
-  listVehicles: async () => structuredClone(sampleVehicles),
+  listVehicles: async (_signal, filters = {}) =>
+    structuredClone(
+      sampleVehicles.filter(
+        (vehicle) =>
+          (!filters.status || vehicle.status === filters.status) &&
+          (filters.maxBattery === undefined ||
+            vehicle.batteryPercent <= filters.maxBattery),
+      ),
+    ),
   getStatus: async () => sampleStatus(),
+  getVehicle: async (vehicleId) => {
+    const vehicle = sampleVehicles.find((vehicle) => vehicle.id === vehicleId);
+    if (!vehicle)
+      throw new FleetApiError(
+        "The requested fleet resource was not found.",
+        "NOT_FOUND",
+        404,
+      );
+    return structuredClone(vehicle);
+  },
+  getMaintenance: async (vehicleId) =>
+    vehicleId === "veh_003"
+      ? [
+          {
+            id: "mnt_demo_001",
+            vehicleId,
+            reason: "LOW_BATTERY",
+            status: "OPEN",
+            faultCode: null,
+            description: "Battery below the rental threshold.",
+            openedAt: "2026-11-18T09:30:00Z",
+            resolvedAt: null,
+          },
+        ]
+      : [],
 };

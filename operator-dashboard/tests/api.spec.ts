@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { createFleetApi, FleetApiError } from "../src/api/fleet";
-import { apiStatus, apiVehicles } from "./fixtures";
+import { apiStatus, apiVehicles, apiMaintenance } from "./fixtures";
 
 test("uses documented read routes, the 500 limit, no cache, and correlation IDs", async () => {
   const requests: { path: string; init?: RequestInit }[] = [];
@@ -130,4 +130,88 @@ test("propagates caller cancellation rather than converting it to a connection f
   const request = api.listVehicles(controller.signal);
   controller.abort();
   await expect(request).rejects.toMatchObject({ name: "AbortError" });
+});
+
+test("serializes inclusive zero/100 battery bounds and combined maintenance filters", async () => {
+  const paths: string[] = [];
+  const api = createFleetApi({
+    fetcher: async (input) => {
+      paths.push(String(input));
+      return Response.json([]);
+    },
+  });
+  await api.listVehicles(undefined, {
+    status: "MAINTENANCE_REQUIRED",
+    maxBattery: 0,
+  });
+  await api.listVehicles(undefined, { maxBattery: 100 });
+  expect(paths).toEqual([
+    "/api/v1/vehicles?limit=500&status=MAINTENANCE_REQUIRED&maxBattery=0",
+    "/api/v1/vehicles?limit=500&maxBattery=100",
+  ]);
+});
+
+test("rejects invalid filter inputs without sending a request", async () => {
+  let calls = 0;
+  const api = createFleetApi({
+    fetcher: async () => {
+      calls++;
+      return Response.json([]);
+    },
+  });
+  for (const maxBattery of [-1, 101, 20.5, NaN])
+    await expect(
+      api.listVehicles(undefined, { maxBattery }),
+    ).rejects.toMatchObject({ code: "INVALID_FILTER" });
+  expect(calls).toBe(0);
+});
+
+test("details and open maintenance use the exact opaque vehicle ID", async () => {
+  const paths: string[] = [];
+  const api = createFleetApi({
+    fetcher: async (input) => {
+      paths.push(String(input));
+      return Response.json(
+        String(input).includes("/maintenance")
+          ? apiMaintenance
+          : apiVehicles[2],
+      );
+    },
+  });
+  expect(await api.getVehicle("veh_103")).toEqual(apiVehicles[2]);
+  expect(await api.getMaintenance("veh_103")).toEqual(apiMaintenance);
+  expect(paths).toEqual([
+    "/api/v1/vehicles/veh_103",
+    "/api/v1/maintenance?vehicleId=veh_103&limit=500",
+  ]);
+});
+
+test("rejects another vehicle’s details or maintenance rather than mixing records", async () => {
+  const api = createFleetApi({
+    fetcher: async (input) =>
+      Response.json(
+        String(input).includes("/maintenance")
+          ? apiMaintenance
+          : apiVehicles[0],
+      ),
+  });
+  await expect(api.getVehicle("veh_103")).rejects.toMatchObject({
+    code: "INVALID_RESPONSE",
+  });
+  await expect(api.getMaintenance("veh_101")).rejects.toMatchObject({
+    code: "INVALID_RESPONSE",
+  });
+});
+
+test("encodes vehicle IDs as data in a detail path", async () => {
+  let path = "";
+  const id = "veh_special/part?x=1";
+  const api = createFleetApi({
+    fetcher: async (input) => {
+      path = String(input);
+      return Response.json({ ...apiVehicles[0], id });
+    },
+  });
+  await api.getVehicle(id);
+  expect(path).toBe("/api/v1/vehicles/veh_special%2Fpart%3Fx%3D1");
 });

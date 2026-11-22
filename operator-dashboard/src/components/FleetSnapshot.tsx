@@ -12,11 +12,15 @@ export function FleetSnapshot({
   zones,
   total,
   demo,
+  filtered = false,
+  onSelect,
 }: {
   vehicles: Vehicle[];
   zones: ZoneStatus[];
   total?: number;
   demo: boolean;
+  filtered?: boolean;
+  onSelect?: (vehicleId: string) => void;
 }) {
   return (
     <section className="panel" aria-labelledby="snapshot-title">
@@ -31,10 +35,11 @@ export function FleetSnapshot({
       </div>
       {vehicles.length === 0 ? (
         <div className="resource-state" role="status">
-          <h3>No vehicles yet</h3>
+          <h3>{filtered ? "No matching vehicles" : "No vehicles yet"}</h3>
           <p>
-            No vehicles were returned by the fleet service. Refresh after a
-            vehicle is registered.
+            {filtered
+              ? "Try a different status or battery limit, or clear the filters."
+              : "No vehicles were returned by the fleet service. Refresh after a vehicle is registered."}
           </p>
         </div>
       ) : (
@@ -63,7 +68,17 @@ export function FleetSnapshot({
                 {vehicles.map((vehicle) => (
                   <tr key={vehicle.id}>
                     <th scope="row">
-                      <span className="vehicle-label">{vehicle.label}</span>
+                      {onSelect ? (
+                        <button
+                          className="vehicle-link"
+                          aria-label={`View ${vehicle.label} details`}
+                          onClick={() => onSelect(vehicle.id)}
+                        >
+                          {vehicle.label}
+                        </button>
+                      ) : (
+                        <span className="vehicle-label">{vehicle.label}</span>
+                      )}
                       <span className="vehicle-type">
                         {vehicle.type === "E_BIKE" ? "E-bike" : "E-scooter"}
                       </span>
@@ -102,8 +117,9 @@ export function FleetSnapshot({
         </>
       )}
       <p className="list-note">
-        Showing {vehicles.length}
-        {total !== undefined ? ` of ${total} reported` : ""} vehicles.{" "}
+        {filtered
+          ? `Showing ${vehicles.length} matching vehicles.${total !== undefined ? ` Fleet total: ${total}.` : ""}`
+          : `Showing ${vehicles.length}${total !== undefined ? ` of ${total} reported` : ""} vehicles.`}{" "}
         {vehicles.length >= VEHICLE_LIMIT
           ? `The API returns at most ${VEHICLE_LIMIT} vehicles per request; this list may be incomplete.`
           : "Refresh to retrieve changes."}

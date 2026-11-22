@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createServer } from "vite";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const project = `frontend-week2-${Date.now()}-${process.pid}`;
+const project = `frontend-week3-${Date.now()}-${process.pid}`;
 const evidence = path.join(root, "test-results", project);
 mkdirSync(evidence, { recursive: true });
 const docker = process.platform === "win32" ? "docker.exe" : "docker";
@@ -16,6 +16,8 @@ const args = [
   project,
   "--file",
   path.join(root, "compose.smoke.yaml"),
+  "--file",
+  path.join(root, "compose.telemetry-smoke.yaml"),
 ];
 function compose(command, capture = false) {
   const result = spawnSync(docker, [...args, ...command], {
@@ -36,7 +38,8 @@ try {
   console.log(
     `Starting isolated stack ${project}. Existing stacks and data are left intact.`,
   );
-  compose(["up", "--build", "--detach", "--wait", "--wait-timeout", "180"]);
+  compose(["--profile", "telemetry", "build"]);
+  compose(["up", "--detach", "--wait", "--wait-timeout", "240"]);
   const address = compose(["port", "operator-dashboard", "80"], true);
   if (!/^127\.0\.0\.1:\d+$/.test(address))
     throw new Error(`Unexpected dashboard address: ${address}`);
@@ -55,7 +58,11 @@ try {
     {
       cwd: root,
       stdio: "inherit",
-      env: { ...process.env, FLEET_LIVE_DASHBOARD_URL: url },
+      env: {
+        ...process.env,
+        FLEET_LIVE_DASHBOARD_URL: url,
+        FLEET_SMOKE_COMPOSE_ARGS: JSON.stringify(args),
+      },
     },
   );
   if (result.error) throw result.error;
