@@ -3,6 +3,8 @@ package com.cebp.fleet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import javax.sql.DataSource;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +16,8 @@ class MigrationIT extends AbstractPostgresIT {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private DataSource datasource;
 
     @BeforeEach
     void clean() {
@@ -24,7 +28,28 @@ class MigrationIT extends AbstractPostgresIT {
     void migrationsWereApplied() {
         Integer applied = jdbc.queryForObject(
                 "select count(*) from flyway_schema_history where success", Integer.class);
-        assertThat(applied).isGreaterThanOrEqualTo(2);
+        assertThat(applied).isGreaterThanOrEqualTo(3);
+    }
+
+    @Test
+    void upgradesExistingWeekTwoFleetAndQueuesOneRegistrationPerVehicle() {
+        String schema = "week2_upgrade";
+        Flyway.configure().dataSource(datasource).schemas(schema).target("2").load().migrate();
+        jdbc.update("""
+                insert into week2_upgrade.vehicles (id, label, type, battery_percent, latitude, longitude)
+                values ('veh_099', 'Legacy low', 'E_BIKE', 19, 48.21, 16.36)
+                """);
+        Flyway flyway = Flyway.configure().dataSource(datasource).schemas(schema).load();
+        flyway.migrate();
+        flyway.migrate();
+        assertThat(jdbc.queryForObject("select status from week2_upgrade.vehicles where id = 'veh_099'", String.class))
+                .isEqualTo("MAINTENANCE_REQUIRED");
+        assertThat(jdbc.queryForObject("select count(*) from week2_upgrade.maintenance_records", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from week2_upgrade.fleet_outbox", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+                select body->'payload'->>'locationMeasuredAt' from week2_upgrade.fleet_outbox
+                where body->>'eventType' = 'VehicleRegistered' and body->'payload'->'zoneId' = 'null'::jsonb
+                """, String.class)).endsWith("Z");
     }
 
     @Test
@@ -41,7 +66,8 @@ class MigrationIT extends AbstractPostgresIT {
     void idSequencesExist() {
         Integer sequences = jdbc.queryForObject("""
                 select count(*) from information_schema.sequences
-                where sequence_name in ('vehicle_id_seq','rental_id_seq','maintenance_id_seq','event_id_seq')
+                where sequence_schema = 'public'
+                  and sequence_name in ('vehicle_id_seq','rental_id_seq','maintenance_id_seq','event_id_seq')
                 """, Integer.class);
         assertThat(sequences).isEqualTo(4);
     }

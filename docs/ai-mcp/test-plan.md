@@ -87,6 +87,13 @@ separately and cannot block deterministic core operation.
 
 ## Week 2 adapter acceptance
 
+Historical adapter evidence; Week 3 uses the snapshot-provider interface and
+Kafka path described in [the implementation plan](week-3-implementation-plan.md).
+Focused runnable coverage is in `ai-mcp/tests/projection.test.js` and
+`ai-mcp/tests/consumer.test.js`; `node scripts/compose-smoke.mjs` exercises
+Kafka/restart/outage/rebuild with draft backend fixtures and real Java telemetry.
+Real backend producer acceptance remains gated on Persons 1/2 agreement.
+
 Run `npm.cmd test --prefix ai-mcp` and `npm.cmd run check --prefix ai-mcp`.
 Tests cover real DTO names and prefixed IDs, retained API paths, explicit zone
 mappings, null availableSince, status/battery filters, backend errors, cursor

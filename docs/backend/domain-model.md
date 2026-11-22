@@ -12,7 +12,7 @@ This document defines what the `fleet-management-service` stores, which rules it
 | D3 | "Rentable" is **derived**, not stored: `status = AVAILABLE` and `battery >= 20`. The API returns it as a read-only `rentable` field. | Battery changes constantly. Storing a duplicate flag would go stale. | A `LOW_BATTERY` status: mixes two independent facts (is it rented? is the battery low?). |
 | D4 | Low battery (under 20%) on a vehicle that is not rented **automatically opens a `LOW_BATTERY` maintenance record** and sets the vehicle to `MAINTENANCE_REQUIRED`. | Gives the AI planner and operators a clear "needs charging" list, and the vehicle can never be rented with a nearly empty battery. | Leaving low-battery vehicles `AVAILABLE`: rental logic gets messy and maintenance endpoints would miss them. |
 | D5 | Maintenance is its **own entity** (`maintenance_records`), not just a flag on the vehicle. | A vehicle can have a history of faults. We need reason, timestamps, and notes for audit. `VehicleMaintenanceChanged` needs a stable ID. | A boolean `needs_maintenance` column: loses history and reason. |
-| D6 | A **rented vehicle stays `RENTED`** even if it faults or its battery drops. The change takes effect when it is returned. | Prevents stranding a rider mid-trip because of a status change. | Instantly forcing maintenance: breaks the active rental flow. |
+| D6 | A fault immediately sets the vehicle to `MAINTENANCE_REQUIRED` while its rental remains `ACTIVE`. Low battery alone preserves `RENTED` during a trip. | Operators see the fault immediately and the rider can still recover and return the trip. | |
 | D7 | Locations are plain `latitude` / `longitude` doubles. "Nearby" uses a **bounding box plus Haversine formula** in SQL. No PostGIS. | PostGIS adds an extension, a special Docker image, and operational overhead. For 12 to 100 vehicles, plain math is fast enough. | PostGIS: too heavy for the demonstrator scope. |
 | D8 | **Zones are circles** (center + radius). The service assigns `zone_id` from the vehicle's location and stores it. MCP area codes map to zone IDs via an explicit lookup table. | Needed for "availability by area" and rebalancing. A circle is trivial to compute and draw; explicit lookup avoids fragile ID inference from area codes. | Polygons or inferring zone IDs from MCP area code strings. |
 | D9 | The rider is just a **`riderId` string**. There is no rider table. | Authentication is out of scope. A string identifies the rider well enough for the demo. | A riders table with accounts: scope creep. |
@@ -25,7 +25,7 @@ This document defines what the `fleet-management-service` stores, which rules it
 | D16 | List endpoints return **plain arrays with a `limit` parameter** (default 100). No pagination wrapper. | Simple responses are easier for the mobile and dashboard teams. | Cursor pagination: over-engineering for the fleet size. |
 | D17 | Status and type columns are **`VARCHAR` with `CHECK` constraints**, not PostgreSQL `ENUM` types. | Easier to change in migrations and works smoothly with JPA/Hibernate. | PostgreSQL enums: painful to alter. |
 | D18 | **No vehicle delete endpoint.** | Rentals and maintenance history reference vehicles, so deleting would break the audit trail. | Hard delete: breaks history. |
-| D19 | **No outbox table** in v0.1. Events are published right after the database commit. | Keeps early iterations simple; listed as a known limitation (Section 8). | Transactional outbox pattern: extra moving parts for v0.1. |
+| D19 | Fleet writes stage immutable Kafka events in the PostgreSQL outbox. | Committed fleet changes survive broker outages and service restarts. | |
 
 ---
 
@@ -115,9 +115,10 @@ stateDiagram-v2
     [*] --> AVAILABLE: VehicleRegistered
     AVAILABLE --> RENTED: start rental
     RENTED --> AVAILABLE: return, healthy and battery >= 20
-    RENTED --> MAINTENANCE_REQUIRED: return, open record or battery < 20
+    RENTED --> MAINTENANCE_REQUIRED: fault during trip, or return with maintenance due
+    MAINTENANCE_REQUIRED --> RENTED: fault resolved with active rental
     AVAILABLE --> MAINTENANCE_REQUIRED: fault, low battery or manual report
-    MAINTENANCE_REQUIRED --> AVAILABLE: all records RESOLVED
+    MAINTENANCE_REQUIRED --> AVAILABLE: no active rental, all records resolved and sufficient battery
 ```
 
 ### 4.2 Rental status
@@ -154,10 +155,10 @@ stateDiagram-v2
 | BR-06 | Returning an already `COMPLETED` rental returns it unchanged (`200`) and publishes **no** second event. |
 | BR-07 | After a return, the vehicle becomes `MAINTENANCE_REQUIRED` if it has an unresolved maintenance record or its battery is under 20 (a `LOW_BATTERY` record is opened). Otherwise it becomes `AVAILABLE`. |
 | BR-08 | A telemetry battery reading under 20 on a vehicle that is **not** rented opens a `LOW_BATTERY` record (once) and sets `MAINTENANCE_REQUIRED`. On a rented vehicle, the record is created but the status change waits for the return (decision D6). |
-| BR-09 | A `VehicleFaultReported` event opens a `FAULT` record (once per vehicle while unresolved). |
-| BR-10 | When the last unresolved record of a `MAINTENANCE_REQUIRED` vehicle is resolved, the vehicle becomes `AVAILABLE`. A `LOW_BATTERY` record is also resolved automatically when telemetry reports battery of 50 or more. |
+| BR-09 | `VehicleFaultReported` opens one unresolved `FAULT` record and immediately sets the vehicle to `MAINTENANCE_REQUIRED`. An active rental stays active and returnable. |
+| BR-10 | A vehicle with an active rental becomes `RENTED` when its fault is resolved. A vehicle without an active rental becomes `AVAILABLE` when all records are resolved and battery meets the rental threshold. A fresh reading of at least 50% resolves a low-battery record automatically. |
 | BR-11 | Every maintenance change publishes `VehicleMaintenanceChanged`. |
-| BR-12 | Telemetry events with a `measuredAt` older than the vehicle's `lastTelemetryAt` are ignored. Events whose eventId is already in processed_events are ignored. Battery updates are ignored if measuredAt is older than lastBatteryAt; location updates are ignored if measuredAt is older than lastLocationAt. lastTelemetryAt is updated as an overall activity timestamp and never gates measurement validity. |
+| BR-12 | Deduplicate telemetry by event ID. Order battery, location, and fault measurements independently by `(measuredAt, publishedAt, eventId)`. `lastTelemetryAt` tracks activity. |
 | BR-13 | fleet-management-service is the sole execution authority. ai-planner output remains advisory before and after approval, and approval decisions exclude raw telemetry. Only an operator-approved proposal (RebalancingProposalApproved) triggers backend state transitions, which are audited.|
 
 ---
@@ -201,9 +202,9 @@ All errors use this JSON shape: `{ code, message, timestamp, correlationId, deta
 
 | Operation | Protection |
 |---|---|
-| Start rental | `Idempotency-Key` unique column and a partial unique index (one `ACTIVE` rental per vehicle and per rider). If two requests race, the loser gets `409`. |
-| Return rental | State check (`COMPLETED` returns unchanged) |
-| Vehicle update from telemetry | Optimistic `version` column plus stale-event check |
+| Start rental | Lock the request key, rider, and vehicle in that order. Database uniqueness protects the final state. A matching replay returns the existing rental with `200`. |
+| Return rental | Lock the vehicle and check the rental row. `COMPLETED` returns the stored result. |
+| Vehicle update from telemetry | Vehicle row lock and independent measurement ordering. |
 | Kafka consumers | `processed_events` table |
 | Approve / reject proposal | State check in `ai-planner` (same pattern) |
 
@@ -213,7 +214,6 @@ All errors use this JSON shape: `{ code, message, timestamp, correlationId, deta
 
 - Schema & API migration required: Existing UUID-only DDL, OpenAPI specs, and JSON validators must be updated to accept prefixed string IDs (veh_001, zone_001, rnt_001, mnt_001, evt_001).
 - No authentication or authorization (out of scope; Week 5 adds only basic validation boundaries).
-- No transactional outbox: a crash between database commit and Kafka publish could lose an event (D19).
 - No pricing, payments or rider accounts.
 - Zones are circles and may overlap; the nearest center wins.
 - No vehicle retirement or delete (D18).

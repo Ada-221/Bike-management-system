@@ -7,6 +7,7 @@ on:
       - "compose.yaml"
       - ".dockerignore"
       - "contracts/ai-mcp/v1/**"
+      - "contracts/fleet/v1/**"
       - "integration-review.md"
       - "kafka-topics.md"
       - "telemetry-contract.md"
@@ -20,6 +21,7 @@ on:
       - "compose.yaml"
       - ".dockerignore"
       - "contracts/ai-mcp/v1/**"
+      - "contracts/fleet/v1/**"
       - "integration-review.md"
       - "kafka-topics.md"
       - "telemetry-contract.md"
@@ -36,6 +38,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm ci
+        working-directory: ai-mcp
       - run: npm test
         working-directory: ai-mcp
       - run: npm run check

@@ -24,6 +24,9 @@ services:
       FLEET_DB_URL: jdbc:postgresql://postgres:5432/fleet
       FLEET_DB_USER: fleet
       FLEET_DB_PASSWORD: ${POSTGRES_PASSWORD:-fleet}
+      FLEET_KAFKA_ENABLED: "true"
+      FLEET_KAFKA_DEAD_LETTER_ENABLED: ${FLEET_KAFKA_DEAD_LETTER_ENABLED:-false}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # "dev" also loads the demo zones. Remove this line for an empty zones table.
       SPRING_PROFILES_ACTIVE: dev
     ports:
@@ -31,6 +34,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/api/v1/health"]
       interval: 5s
@@ -81,26 +86,44 @@ services:
       - ./contracts/ai-mcp/v1:/usr/share/nginx/html/contracts:ro
     restart: unless-stopped
   ai-mcp-service:
+    stop_grace_period: 60s
     build:
       context: .
       dockerfile: ai-mcp/Dockerfile
     ports:
       - "8083:8083"
     environment:
-      BACKEND_API_URL: ${BACKEND_API_URL:-http://fleet-management-service:8080/api/v1/}
+      MCP_KAFKA_BROKERS: ${MCP_KAFKA_BROKERS:-kafka:9092}
+      MCP_KAFKA_GROUP_ID: ${MCP_KAFKA_GROUP_ID:-cebp-mcp-read-model-v1}
+      # Private demos may select fleet-week3-v1. Shared activation follows owner review.
+      MCP_BACKEND_EVENT_CONTRACT: ${MCP_BACKEND_EVENT_CONTRACT:-}
       MCP_AREA_ZONE_MAP_JSON: ${MCP_AREA_ZONE_MAP_JSON:-}
       MCP_STATE_DIR: /data
     volumes:
       - ai-mcp-state:/data
     depends_on:
-      fleet-management-service:
+      kafka:
         condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8083/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
       timeout: 3s
       retries: 20
     restart: unless-stopped
+
+  kafka-topics:
+    image: apache/kafka:4.1.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        for topic in fleet.vehicle fleet.rental fleet.maintenance fleet.vehicle.DLT; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$topic" --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=-1
+        done
 
   telemetry:
     profiles: [telemetry]
@@ -112,6 +135,8 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
 
 volumes:
   postgres-data:

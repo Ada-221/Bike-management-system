@@ -1,0 +1,100 @@
+[
+  {
+    "topic": "fleet.vehicle",
+    "key": "veh_001",
+    "event": {
+      "schemaVersion": "1.0",
+      "vehicleId": "veh_001",
+      "correlationId": "corr_fleet_example",
+      "producer": "fleet-management-service",
+      "eventId": "evt_0001",
+      "eventType": "VehicleRegistered",
+      "publishedAt": "2026-11-18T09:10:00Z",
+      "stateRevision": 1,
+      "payload": {
+        "status": "AVAILABLE",
+        "zoneId": "zone_001",
+        "batteryPercent": 75,
+        "latitude": 48.21,
+        "longitude": 16.36,
+        "batteryMeasuredAt": "2026-11-18T09:10:00Z",
+        "locationMeasuredAt": "2026-11-18T09:10:00Z"
+      }
+    }
+  },
+  {
+    "topic": "fleet.rental",
+    "key": "veh_001",
+    "event": {
+      "schemaVersion": "1.0",
+      "vehicleId": "veh_001",
+      "correlationId": "corr_fleet_example",
+      "producer": "fleet-management-service",
+      "eventId": "evt_0002",
+      "eventType": "RentalStarted",
+      "publishedAt": "2026-11-18T09:15:00Z",
+      "stateRevision": 2,
+      "payload": {
+        "status": "RENTED",
+        "zoneId": "zone_001",
+        "rentalId": "rnt_001",
+        "riderId": "rider-example",
+        "startedAt": "2026-11-18T09:15:00Z",
+        "startLatitude": 48.21,
+        "startLongitude": 16.36,
+        "startBatteryPercent": 75
+      }
+    }
+  },
+  {
+    "topic": "fleet.maintenance",
+    "key": "veh_001",
+    "event": {
+      "schemaVersion": "1.0",
+      "vehicleId": "veh_001",
+      "correlationId": "corr_fleet_example",
+      "producer": "fleet-management-service",
+      "eventId": "evt_0003",
+      "eventType": "VehicleMaintenanceChanged",
+      "publishedAt": "2026-11-18T09:20:00Z",
+      "stateRevision": 3,
+      "payload": {
+        "status": "MAINTENANCE_REQUIRED",
+        "zoneId": "zone_001",
+        "maintenanceId": "mnt_001",
+        "reason": "FAULT",
+        "previousStatus": null,
+        "newStatus": "OPEN",
+        "faultCode": "BRAKE_SENSOR",
+        "changedAt": "2026-11-18T09:20:00Z"
+      }
+    }
+  },
+  {
+    "topic": "fleet.rental",
+    "key": "veh_001",
+    "event": {
+      "schemaVersion": "1.0",
+      "vehicleId": "veh_001",
+      "correlationId": "corr_fleet_example",
+      "producer": "fleet-management-service",
+      "eventId": "evt_0004",
+      "eventType": "RentalEnded",
+      "publishedAt": "2026-11-18T09:25:00Z",
+      "stateRevision": 4,
+      "payload": {
+        "status": "MAINTENANCE_REQUIRED",
+        "zoneId": null,
+        "rentalId": "rnt_001",
+        "riderId": "rider-example",
+        "startedAt": "2026-11-18T09:15:00Z",
+        "endedAt": "2026-11-18T09:25:00Z",
+        "durationSeconds": 600,
+        "endLatitude": 48.24,
+        "endLongitude": 16.4,
+        "endBatteryPercent": 75,
+        "locationMeasuredAt": "2026-11-18T09:25:00Z"
+      }
+    }
+  }
+]

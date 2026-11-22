@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.cebp.fleet.AbstractPostgresIT;
 import com.cebp.fleet.event.EventPublisher;
 import com.cebp.fleet.event.Topics;
-import com.cebp.fleet.event.VehicleRegisteredEvent;
+import com.cebp.fleet.event.FleetEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
 import java.util.Map;
@@ -50,13 +50,16 @@ class VehicleControllerIT extends AbstractPostgresIT {
     private ObjectMapper objectMapper;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private com.cebp.fleet.zone.ZoneAssigner zoneAssigner;
 
-    /** Replaces the logging publisher so tests can check what was (not) published. */
+    /** Captures staged events without running a Kafka broker. */
     @MockBean
     private EventPublisher publisher;
 
     @BeforeEach
     void resetDatabase() {
+        zoneAssigner.invalidate();
         jdbc.execute("TRUNCATE rentals, maintenance_records, vehicles, zones, processed_events");
         jdbc.update("insert into zones (id, name, center_latitude, center_longitude, radius_meters) "
                 + "values ('zone_001', 'City Center', 48.2100, 16.3600, 800)");
@@ -100,7 +103,7 @@ class VehicleControllerIT extends AbstractPostgresIT {
                 .andExpect(jsonPath("$.lastLocationAt").isNotEmpty())
                 .andExpect(jsonPath("$.lastTelemetryAt").isEmpty());
 
-        verify(publisher).publish(eq(Topics.FLEET_VEHICLE), anyString(), any(VehicleRegisteredEvent.class));
+        verify(publisher).publish(eq(Topics.FLEET_VEHICLE), anyString(), any(FleetEvent.class));
     }
 
     @Test
@@ -113,12 +116,12 @@ class VehicleControllerIT extends AbstractPostgresIT {
     }
 
     @Test
-    void lowBatteryVehicleIsAvailableButNotRentable() throws Exception {
+    void lowBatteryVehicleRequiresMaintenanceAndIsNotRentable() throws Exception {
         mockMvc.perform(post("/vehicles")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(vehicleJson("EB-001", 48.2102, 16.3598, 15)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("AVAILABLE"))
+                .andExpect(jsonPath("$.status").value("MAINTENANCE_REQUIRED"))
                 .andExpect(jsonPath("$.rentable").value(false));
     }
 
@@ -195,7 +198,9 @@ class VehicleControllerIT extends AbstractPostgresIT {
         mockMvc.perform(get("/vehicles?zoneId=zone_002"))
                 .andExpect(jsonPath("$[*].label", containsInAnyOrder("EB-B")));
         mockMvc.perform(get("/vehicles?status=AVAILABLE"))
-                .andExpect(jsonPath("$", hasSize(3)));
+                .andExpect(jsonPath("$[*].label", containsInAnyOrder("EB-A", "EB-B")));
+        mockMvc.perform(get("/vehicles?status=MAINTENANCE_REQUIRED"))
+                .andExpect(jsonPath("$[*].label", containsInAnyOrder("EB-C")));
         mockMvc.perform(get("/vehicles?status=RENTED"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));

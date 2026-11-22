@@ -34,6 +34,9 @@ public class Vehicle {
     private Instant lastLocationAt;
     /** Activity only: last time any telemetry arrived. Never gates validity. */
     private Instant lastTelemetryAt;
+    private String lastBatteryOrder;
+    private String lastLocationOrder;
+    private String lastFaultOrder;
 
     /** Optimistic locking. A wrapper type (not long) so Spring Data can tell a new entity from an existing one. */
     @Version
@@ -69,6 +72,46 @@ public class Vehicle {
     public void rename(String newLabel, Instant now) {
         this.label = newLabel;
         this.updatedAt = now;
+    }
+
+    public void changeStatus(VehicleStatus newStatus, Instant now) {
+        if (status != newStatus) {
+            status = newStatus;
+            updatedAt = now;
+        }
+    }
+
+    public boolean updateBattery(int percent, MeasurementOrder order, Instant now) {
+        if (!order.wins(lastBatteryOrder, lastBatteryAt)) return false;
+        batteryPercent = percent;
+        lastBatteryAt = order.measuredAt().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        lastBatteryOrder = order.encode();
+        updatedAt = now;
+        return true;
+    }
+
+    public boolean updateLocation(double lat, double lon, String zone, MeasurementOrder order, Instant now) {
+        if (!order.wins(lastLocationOrder, lastLocationAt)) return false;
+        latitude = lat;
+        longitude = lon;
+        zoneId = zone;
+        lastLocationAt = order.measuredAt().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        lastLocationOrder = order.encode();
+        updatedAt = now;
+        return true;
+    }
+
+    public boolean acceptFault(MeasurementOrder order) {
+        if (!order.wins(lastFaultOrder, createdAt)) return false;
+        lastFaultOrder = order.encode();
+        return true;
+    }
+
+    public void noteTelemetry(Instant measuredAt, Instant now) {
+        if (lastTelemetryAt == null || measuredAt.isAfter(lastTelemetryAt)) {
+            lastTelemetryAt = measuredAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        }
+        updatedAt = now;
     }
 
     public String getId() {

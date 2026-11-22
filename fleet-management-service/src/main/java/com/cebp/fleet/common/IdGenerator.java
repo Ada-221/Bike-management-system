@@ -1,6 +1,7 @@
 package com.cebp.fleet.common;
 
 import java.util.Objects;
+import java.util.Locale;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -15,11 +16,19 @@ public class IdGenerator {
     }
 
     public String nextVehicleId() {
-        return String.format("veh_%03d", next("vehicle_id_seq"));
+        return String.format(Locale.ROOT, "veh_%03d", next("vehicle_id_seq"));
     }
 
     public String nextEventId() {
-        return String.format("evt_%04d", next("event_id_seq"));
+        return String.format(Locale.ROOT, "evt_%04d", next("event_id_seq"));
+    }
+
+    public String nextRentalId() {
+        return String.format(Locale.ROOT, "rnt_%03d", next("rental_id_seq"));
+    }
+
+    public String nextMaintenanceId() {
+        return String.format(Locale.ROOT, "mnt_%03d", next("maintenance_id_seq"));
     }
 
     // The sequence name is always a constant from this class, never user input.

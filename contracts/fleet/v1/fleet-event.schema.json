@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Fleet Week 3 domain event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "eventType",
+    "schemaVersion",
+    "vehicleId",
+    "publishedAt",
+    "correlationId",
+    "producer",
+    "stateRevision",
+    "payload"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "pattern": "^evt_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
+    },
+    "eventType": {
+      "enum": [
+        "VehicleRegistered",
+        "VehicleStateUpdated",
+        "RentalStarted",
+        "RentalEnded",
+        "VehicleMaintenanceChanged"
+      ]
+    },
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "vehicleId": {
+      "type": "string",
+      "pattern": "^veh_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
+    },
+    "publishedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "producer": {
+      "const": "fleet-management-service"
+    },
+    "stateRevision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "eventType": {
+          "const": "VehicleRegistered"
+        },
+        "payload": {
+          "$ref": "#/$defs/VehicleRegistered"
+        }
+      }
+    },
+    {
+      "properties": {
+        "eventType": {
+          "const": "VehicleStateUpdated"
+        },
+        "payload": {
+          "$ref": "#/$defs/VehicleStateUpdated"
+        }
+      }
+    },
+    {
+      "properties": {
+        "eventType": {
+          "const": "RentalStarted"
+        },
+        "payload": {
+          "$ref": "#/$defs/RentalStarted"
+        }
+      }
+    },
+    {
+      "properties": {
+        "eventType": {
+          "const": "RentalEnded"
+        },
+        "payload": {
+          "$ref": "#/$defs/RentalEnded"
+        }
+      }
+    },
+    {
+      "properties": {
+        "eventType": {
+          "const": "VehicleMaintenanceChanged"
+        },
+        "payload": {
+          "$ref": "#/$defs/VehicleMaintenanceChanged"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "VehicleRegistered": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "zoneId",
+        "batteryPercent",
+        "latitude",
+        "longitude",
+        "batteryMeasuredAt",
+        "locationMeasuredAt"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "RENTED",
+            "MAINTENANCE_REQUIRED"
+          ]
+        },
+        "zoneId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^zone_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "batteryPercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "batteryMeasuredAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "locationMeasuredAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "VehicleStateUpdated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "zoneId"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "RENTED",
+            "MAINTENANCE_REQUIRED"
+          ]
+        },
+        "zoneId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^zone_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "RentalStarted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "zoneId",
+        "rentalId",
+        "riderId",
+        "startedAt",
+        "startLatitude",
+        "startLongitude",
+        "startBatteryPercent"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "RENTED",
+            "MAINTENANCE_REQUIRED"
+          ]
+        },
+        "zoneId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^zone_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rentalId": {
+          "type": "string",
+          "pattern": "^rnt_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
+        },
+        "riderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "startLatitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "startLongitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "startBatteryPercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "RentalEnded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "zoneId",
+        "rentalId",
+        "riderId",
+        "startedAt",
+        "endedAt",
+        "durationSeconds",
+        "endLatitude",
+        "endLongitude",
+        "endBatteryPercent"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "RENTED",
+            "MAINTENANCE_REQUIRED"
+          ]
+        },
+        "zoneId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^zone_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rentalId": {
+          "type": "string",
+          "pattern": "^rnt_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
+        },
+        "riderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "endedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "durationSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "endLatitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "endLongitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "endBatteryPercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "locationMeasuredAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "VehicleMaintenanceChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "zoneId",
+        "maintenanceId",
+        "reason",
+        "previousStatus",
+        "newStatus",
+        "faultCode",
+        "changedAt"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "RENTED",
+            "MAINTENANCE_REQUIRED"
+          ]
+        },
+        "zoneId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^zone_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maintenanceId": {
+          "type": "string",
+          "pattern": "^mnt_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$"
+        },
+        "reason": {
+          "enum": [
+            "FAULT",
+            "LOW_BATTERY",
+            "MANUAL"
+          ]
+        },
+        "previousStatus": {
+          "oneOf": [
+            {
+              "enum": [
+                "OPEN",
+                "IN_PROGRESS",
+                "RESOLVED"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "newStatus": {
+          "enum": [
+            "OPEN",
+            "IN_PROGRESS",
+            "RESOLVED"
+          ]
+        },
+        "faultCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 50
+        },
+        "changedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    }
+  }
+}

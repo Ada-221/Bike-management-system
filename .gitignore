@@ -22,5 +22,7 @@ dist/
 target/
 coverage/
 node_modules/
+/ai-mcp/data/
+/data/
 __pycache__/
 *.pyc

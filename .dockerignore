@@ -1,0 +1,10 @@
+.git
+**/node_modules
+**/target
+**/build
+**/data
+build
+.env
+.env.*
+!.env.example
+Bike-management-system

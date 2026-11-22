@@ -1,5 +1,15 @@
 # Event and telemetry integration register
 
+## Person 1 Week 3 producer integration
+
+The backend publishes real fleet events through PostgreSQL and consumes
+battery, location, and fault telemetry. The revised lifecycle supports
+`MAINTENANCE_REQUIRED` with an active, returnable rental. The
+[fleet v1 draft](contracts/fleet/v1/README.md) and
+[Week 3 verification](docs/integration/week-3-fleet-verification.md) supersede
+the fixture-only handoff below for the isolated integration stack. Shared
+activation still requires affected-owner review.
+
 ## Combined Week 2 implementation
 
 The integration branch combines the fleet, telemetry, reconciled MCP and rider
@@ -9,7 +19,9 @@ proposals are implemented. Nearby/rental/return APIs remain unimplemented, even
 where OpenAPI or rider adapter code describes them. Rider demo mode is the
 supported default; dashboard fixtures remain the current data source.
 
-MCP Kafka projection, fleet telemetry consumers, demand, OFFLINE inference and
+The Week 2 evidence below is historical. Person 5's Week 3 consumer projection is
+implemented on the feature branch; production backend integration is gated by
+the handoff below. Fleet telemetry consumers, demand, OFFLINE inference and
 operational proposal execution remain deferred. An approved proposal records a
 human decision only. See [verification](docs/integration/week-2-verification.md)
 for combined checks and delivery blockers; historical component evidence alone
@@ -99,3 +111,65 @@ The three Kafka topics remain `fleet.vehicle`, `fleet.rental`, and
   dead-letter handling, demand ownership, and OFFLINE semantics.
 - Fault description validation until requiredness is agreed.
 - Any approval-triggered operational action or telemetry-based approval rule.
+
+## Person 5 — Week 3 consumer handoff (pending owner agreement)
+
+**Status, 2026-11-16:** These are consumer requirements and a local fixture
+proposal, **not agreed shared production schemas**. The user confirmed no extra
+owner agreement exists. Persons 1/2 must review and record acceptance before
+enabling a production backend event adapter. No owner messages were sent and no
+producer implementation was changed. The Week 2 backend logs flat registration
+events without measurement timestamps or a state revision; it does not publish
+Kafka events. Rental/maintenance/admin event coverage is also outstanding.
+
+| Handoff | Owner/action required | Person 5 implementation |
+|---|---|---|
+| Registration | Person 1 supplies complete initial query state, actual battery/location measurement timestamps, stable ID, schema version, vehicle key and revision; Person 2 confirms publication. | No bootstrap from legacy REST cache. Unregistered updates are retained and block complete totals. |
+| Operational status | Person 1 supplies authoritative resulting status for rental, maintenance and every administrative update affecting tools. | No inference from event names, proposal approval, timestamps or topic order. |
+| Status/zone ordering | Persons 1/2 confirm one monotonically increasing per-vehicle `stateRevision` across all backend domain topics. | Each status/zone field tracks its revision. Contradictory same-revision field values fail integrity. |
+| Area/zone changes | Person 1 publishes backend-assigned zone state, including telemetry-driven zone changes. | GPS changes coordinates only. MCP uses configured area-to-zone mappings. |
+| Telemetry ordering | Person 2 confirms proposed ascending tuple `(measuredAt, publishedAt, eventId)` independently for battery and location; greatest tuple wins. | UTC comparison retains Java Instant nanoseconds. Exact identical ID redelivery is a no-op; changed content under an ID fails. |
+| Replay | Persons 1/2 confirm complete registration and subsequent state history, no compaction, retained IDs on retries and a topic recreation/recovery policy. | Demonstration topic initializer uses `cleanup.policy=delete`, `retention.ms=-1`. Rebuild refuses nonzero log starts and missing registrations. This is a local demo default, not a settled operations policy. |
+
+### Local fixture contract `person5-week3-draft-v1`
+
+Only `MCP_BACKEND_EVENT_CONTRACT=person5-week3-draft-v1` enables this draft
+backend adapter. The default is empty and supported backend events fail with an
+actionable contract-gate diagnostic. The isolated smoke explicitly opts in;
+this switch does not constitute affected-owner approval.
+
+All draft backend events use a JSON object envelope with **only** `eventId`
+(`evt_...`), `eventType`, `schemaVersion` (`1.0`), `vehicleId` (`veh_...`),
+`publishedAt` (UTC), `correlationId` (nonempty), `producer`
+(`fleet-management-service`), `stateRevision` (nonnegative safe integer) and
+`payload`. The Kafka record key must equal `vehicleId`.
+
+| Event | Topic | Proposed payload |
+|---|---|---|
+| `VehicleRegistered` | `fleet.vehicle` | Required `status`, `zoneId`, `batteryPercent`, `latitude`, `longitude`, `batteryMeasuredAt`, `locationMeasuredAt`; complete query state. |
+| `VehicleStateUpdated` | `fleet.vehicle` | Required authoritative resulting `status`; optional backend-issued `zoneId`. Covers administrative and zone changes, including repeated status for a zone-only change. |
+| `RentalStarted`, `RentalEnded` | `fleet.rental` | Required authoritative resulting `status`; optional backend-issued `zoneId`. |
+| `VehicleMaintenanceChanged` | `fleet.maintenance` | Required authoritative resulting `status`; optional backend-issued `zoneId`. |
+
+Status stays `AVAILABLE`, `RENTED` or `MAINTENANCE_REQUIRED`. Battery is an
+integer 0..100; coordinates have geographic bounds; zone IDs are `zone_...`.
+UTC timestamps allow up to nine fractional digits. No extra payload properties
+are accepted by this fixture draft. Backend producer owners may require richer
+schemas; agree and update the adapter/tests before real integration. Telemetry
+retains the already settled envelope and separate battery/location payloads.
+
+Unrelated named event types are explicitly skipped and checkpointed. Invalid
+JSON, tombstones, missing event types, malformed supported events, wrong keys,
+wrong domain topic, unsupported versions and conflicting IDs stop progress and
+fail readiness. No dead-letter policy or automatic bad-record skipping is
+invented. Repair/republication requires stable identity rules; recover by
+restoring retained valid history and using the offline rebuild procedure.
+
+Week 3 changes the MCP **read path** in the historical settled-decision row:
+tools read the event projection only; the backend remains operational authority.
+`availableSince` stays null. Demand, OFFLINE, operational command execution and
+proposal lifecycle event publication remain unresolved/out of scope.
+
+See [implementation plan](docs/ai-mcp/week-3-implementation-plan.md),
+[startup/rebuild](ai-mcp/README.md), and
+[verification](docs/ai-mcp/week-3-verification.md).

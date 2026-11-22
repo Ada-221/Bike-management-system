@@ -3,6 +3,7 @@ package com.cebp.fleet.vehicle;
 import com.cebp.fleet.vehicle.dto.VehicleCreateRequest;
 import com.cebp.fleet.vehicle.dto.VehicleResponse;
 import com.cebp.fleet.vehicle.dto.VehicleUpdateRequest;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/vehicles")
 public class VehicleController {
+    public record NearbyVehicle(@JsonUnwrapped VehicleResponse vehicle, int distanceMeters) {}
 
     private final VehicleService service;
     private final VehicleMapper mapper;
@@ -46,6 +48,16 @@ public class VehicleController {
     @GetMapping("/{vehicleId}")
     public VehicleResponse get(@PathVariable String vehicleId) {
         return mapper.toResponse(service.get(vehicleId));
+    }
+
+    @GetMapping("/nearby")
+    public List<NearbyVehicle> nearby(@RequestParam double lat, @RequestParam double lon,
+                                      @RequestParam(required = false) Integer radiusMeters,
+                                      @RequestParam(required = false) Integer minBattery,
+                                      @RequestParam(required = false) Integer limit) {
+        return service.nearby(lat, lon, radiusMeters, minBattery, limit).stream()
+                .map(v -> new NearbyVehicle(mapper.toResponse(v.vehicle()), (int) Math.round(v.distanceMeters())))
+                .toList();
     }
 
     @PatchMapping("/{vehicleId}")

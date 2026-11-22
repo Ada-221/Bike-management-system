@@ -2,12 +2,11 @@
 
 Android app for riders of the E-Bike/Scooter Sharing Fleet Management System.
 
-**Week 2 status:** demo mode is the supported default. The optional HTTP adapter
-targets the draft fleet API contract ([`api/fleet-api.yaml`](../api/fleet-api.yaml)).
-The implemented backend has vehicle CRUD but **does not implement nearby, rental
-or return endpoints**. Running the backend does not enable the live rider flow.
-Keep `rider.backendUrl` empty for the integrated milestone and instrumentation tests.
-A build setting enables the adapter only for future compatible backends.
+Demo mode is the default. Set `rider.backendUrl=http://10.0.2.2:8080/api/v1/`
+for an emulator build backed by the Week 3 fleet API. The integrated
+instrumentation test requires an isolated backend and checks that a rider can
+resume and return a trip after the vehicle develops a fault. The fault changes
+the vehicle status, while the rider still has an active trip to return.
 
 ## Rider flow
 

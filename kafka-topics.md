@@ -1,13 +1,10 @@
 # Kafka topics and routing
 
 The project keeps its three existing domain topics. Do not add `fleet.events`.
-Telemetry battery and location updates are separate events on `fleet.vehicle`.
+Telemetry battery, location, and fault records are separate events on `fleet.vehicle`.
 
-| Topic | Settled routing | Event details still requiring owner agreement |
-|---|---|---|
-| `fleet.vehicle` | `VehicleBatteryUpdated` and `VehicleLocationUpdated`, keyed by the Kafka record key `vehicleId`. | Complete producer/consumer matrix, schema version rollout, retention, retry, and dead-letter policy. `VehicleRegistered` owner/routing remains to be confirmed. |
-| `fleet.rental` | Existing rental domain topic. | Exact event routing and producer/consumer ownership. Demand may be derived from rentals or published separately; `DemandRecorded` ownership and payload remain open. |
-| `fleet.maintenance` | Existing maintenance domain topic. | Exact event routing and producer/consumer ownership, including unsettled fault description rules. |
+For the implemented topic routing and the adapter awaiting shared activation,
+see the [Week 3 fleet event contract](contracts/fleet/v1/README.md).
 
 ## Settled telemetry envelope
 

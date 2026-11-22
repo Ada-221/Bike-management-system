@@ -77,4 +77,9 @@ Pagination uses opaque schema-valid tokens bound to the tool, query, and fleet
 snapshot. Snapshots at the backend 500-record cap fail as unavailable rather
 than reporting potentially incomplete totals. Planner evidence hashes the actual
 low-battery tool result. Approval remains advisory, including after restart.
-Demand, Kafka projection, and OFFLINE rules remain deferred.
+That paragraph describes historical Week 2 behavior. Week 3 keeps the v1 tool
+schemas and semantics while reading only a JSON Kafka projection, with no
+500-record cap. Backend producer integration is gated on owner agreement; see
+[service/replay](../../../ai-mcp/README.md) and
+[verification](../../../docs/ai-mcp/week-3-verification.md). Demand and OFFLINE
+rules remain deferred.

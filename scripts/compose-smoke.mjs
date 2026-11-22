@@ -1,63 +1,67 @@
-// Unique project + fresh volumes. Cleanup is restricted to this invocation's project.
+// Exercise real REST and telemetry producers with isolated Compose volumes.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { validate } from '../ai-mcp/src/contract.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const project = `week2-smoke-${Date.now()}-${process.pid}`;
+const project = `week3-smoke-${Date.now()}-${process.pid}`;
 const output = path.join(root, 'build', project);
 mkdirSync(output, { recursive: true });
 const override = path.join(output, 'override.yaml');
-// No fixed host ports: smoke requests run within the private Compose network.
-writeFileSync(override, `services:\n${['postgres', 'kafka', 'fleet-management-service', 'operator-dashboard', 'ai-mcp-schema-viewer', 'ai-mcp-service'].map(s => `  ${s}:\n    ports: !reset []${s === 'ai-mcp-service' ? '\n    environment:\n      BACKEND_API_URL: http://fleet-management-service:8080/api/v1/\n      MCP_AREA_ZONE_MAP_JSON: \'{"area_center":"zone_001","area_south":"zone_002"}\'' : ''}`).join('\n')}\n`);
+writeFileSync(override, `services:\n${['postgres', 'kafka', 'fleet-management-service', 'operator-dashboard', 'ai-mcp-schema-viewer', 'ai-mcp-service'].map(s => `  ${s}:\n    ports: !reset []${s === 'ai-mcp-service' ? '\n    environment:\n      MCP_BACKEND_EVENT_CONTRACT: fleet-week3-v1\n      MCP_AREA_ZONE_MAP_JSON: \'{"area_center":"zone_001","area_south":"zone_002"}\'' : ''}`).join('\n')}\n`);
 const base = ['compose', '--project-name', project, '--env-file', '.env.example', '-f', 'compose.yaml', '-f', override];
 let sequence = 0;
-function compose(args, { allowFailure = false } = {}) {
-  const result = spawnSync('docker', [...base, ...args], { cwd: root, encoding: 'utf8', maxBuffer: 30 * 1024 * 1024, timeout: 900_000 });
-  writeFileSync(path.join(output, `${++sequence}-${args[0]}.log`), `${result.stdout ?? ''}\n${result.stderr ?? ''}\n${result.error ?? ''}`);
-  if (!allowFailure) assert.equal(result.status, 0, `${args.join(' ')} failed; see ${output}\n${result.stderr}`);
-  return result.stdout ?? '';
-}
-try {
-  compose(['--profile', 'telemetry', 'config', '--quiet']);
-  compose(['--profile', 'telemetry', 'build']);
-  compose(['up', '-d', '--wait', '--wait-timeout', '240']);
-  compose(['ps', '--all']);
-  compose(['exec', '-T', 'ai-mcp-service', 'node', '-e', `Promise.all(['http://fleet-management-service:8080/api/v1/health','http://operator-dashboard/','http://ai-mcp-schema-viewer/','http://127.0.0.1:8083/health','http://127.0.0.1:8083/ready'].map(async u=>{const r=await fetch(u);if(!r.ok)throw Error(u+': '+r.status)})).catch(e=>{console.error(e);process.exit(1)})`]);
-  compose(['cp', 'ai-mcp/scripts/backend-smoke.mjs', 'ai-mcp-service:/tmp/backend-smoke.mjs']);
-  compose(['exec', '-T', 'ai-mcp-service', 'node', '/tmp/backend-smoke.mjs']);
-  compose(['restart', 'ai-mcp-service']);
-  compose(['up', '-d', '--wait', '--wait-timeout', '90', 'ai-mcp-service']);
-  compose(['exec', '-T', 'ai-mcp-service', 'node', '/tmp/backend-smoke.mjs', 'verify']);
-  // No simulator on normal startup. Explicit opt-in only for this fresh broker.
-  compose(['--profile', 'telemetry', 'run', '-d', '--name', `${project}-simulator`, '-e', 'TELEMETRY_SIMULATOR_ENABLED=true', 'telemetry']);
-  const records = compose(['exec', '-T', 'kafka', '/opt/kafka/bin/kafka-console-consumer.sh', '--bootstrap-server', 'kafka:9092', '--topic', 'fleet.vehicle', '--from-beginning', '--property', 'print.key=true', '--max-messages', '4', '--timeout-ms', '60000']);
-  const schema = JSON.parse(readFileSync(path.join(root, 'telemetry.schema.json'), 'utf8'));
-  const events = records.trim().split(/\r?\n/).map(line => {
-    const tab = line.indexOf('\t');
-    assert.ok(tab > 0, 'Kafka record must include its key');
-    const event = JSON.parse(line.slice(tab + 1));
-    assert.equal(line.slice(0, tab), event.vehicleId);
-    assert.deepEqual(validate(event, schema), []);
-    assert.match(event.eventId, /^evt_/);
-    return event;
+async function compose(args, { allowFailure = false } = {}) {
+  const result = await new Promise((resolve) => {
+    const child = spawn('docker', [...base, ...args], { cwd: root, windowsHide: true });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', (data) => { stdout += data; });
+    child.stderr.on('data', (data) => { stderr += data; });
+    child.on('error', (error) => resolve({ status: -1, stdout, stderr: stderr + error.message }));
+    child.on('close', (status) => resolve({ status, stdout, stderr }));
   });
-  assert.equal(events.length, 4);
-  assert.equal(new Set(events.map(e => e.eventId)).size, 4);
-  assert.equal(events.filter(e => e.eventType === 'VehicleBatteryUpdated').length, 2);
-  assert.equal(events.filter(e => e.eventType === 'VehicleLocationUpdated').length, 2);
-  // Telemetry has no fleet consumer: even after publication, approved state is unchanged.
-  compose(['exec', '-T', 'ai-mcp-service', 'node', '/tmp/backend-smoke.mjs', 'verify']);
-  writeFileSync(path.join(output, 'result.txt'), 'PASS: combined readiness, backend/MCP semantics, restart persistence, keyed schema-valid telemetry; fleet unchanged.\n');
+  writeFileSync(path.join(output, `${++sequence}-${args[0]}.log`), `${result.stdout}\n${result.stderr}`);
+  if (!allowFailure) assert.equal(result.status, 0, `${args.join(' ')} failed; see ${output}\n${result.stderr}`);
+  return result.stdout;
+}
+const exercise = (mode) => compose(['exec', '-T', 'ai-mcp-service', 'node', 'scripts/kafka-smoke.mjs', mode]);
+try {
+  await compose(['--profile', 'telemetry', 'config', '--quiet']);
+  console.log(`Building isolated ${project}; logs: ${output}`);
+  await compose(['--profile', 'telemetry', 'build']);
+  await compose(['up', '-d', '--wait', '--wait-timeout', '240']);
+  await exercise('seed');
+  const simulator = ['--profile', 'telemetry', 'run', '--rm', '-e', 'TELEMETRY_SIMULATOR_ENABLED=true',
+    '-e', 'SPRING_MAIN_WEB_APPLICATION_TYPE=none'];
+  await compose([...simulator, 'telemetry']);
+  await exercise('rent');
+  await compose([...simulator, '-e', 'TELEMETRY_SIMULATOR_SCENARIO=fault', 'telemetry']);
+  await exercise('fault-return');
+  await exercise('verify');
+  console.log('Passed real rental, fault, and return; checking restart and broker outage.');
+  await compose(['restart', 'ai-mcp-service']);
+  await compose(['up', '-d', '--no-deps', '--wait', '--wait-timeout', '90', 'ai-mcp-service']);
+  await exercise('verify');
+  await compose(['stop', 'kafka']);
+  await compose(['exec', '-T', 'ai-mcp-service', 'node', '-e', `setTimeout(async()=>{const r=await fetch('http://localhost:8083/ready');if(r.status!==503)process.exit(1);const h=await fetch('http://localhost:8083/health');if(!h.ok)process.exit(1)},15000)`]);
+  await exercise('outage');
+  await compose(['up', '-d', '--wait', '--wait-timeout', '90', 'kafka']);
+  await compose(['up', '-d', '--no-deps', '--wait', '--wait-timeout', '90', 'ai-mcp-service']);
+  await exercise('verify');
+  await compose(['stop', 'fleet-management-service']);
+  await exercise('verify');
+  await compose(['stop', 'ai-mcp-service']);
+  await compose(['run', '--rm', '--no-deps', 'ai-mcp-service', 'npm', 'run', 'rebuild']);
+  await compose(['up', '-d', '--no-deps', '--wait', '--wait-timeout', '90', 'ai-mcp-service']);
+  await exercise('verify');
+  writeFileSync(path.join(output, 'result.txt'), 'PASS: real fleet REST and telemetry, mid-trip fault and return, dashboard proxy, outbox recovery, backend-independent MCP, restart and rebuild, advisory approval preserved.\n');
   console.log(`PASS ${project}; evidence: ${output}`);
 } catch (error) {
   writeFileSync(path.join(output, 'result.txt'), `FAIL: ${error.stack}\n`);
-  process.exitCode = 1;
-  console.error(error);
+  process.exitCode = 1; console.error(error);
 } finally {
-  compose(['logs', '--no-color'], { allowFailure: true });
-  compose(['--profile', 'telemetry', 'down', '--volumes', '--remove-orphans'], { allowFailure: false });
+  await compose(['logs', '--no-color'], { allowFailure: true });
+  await compose(['--profile', 'telemetry', 'down', '--volumes', '--remove-orphans']);
 }

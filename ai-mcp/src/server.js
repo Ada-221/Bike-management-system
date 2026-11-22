@@ -1,5 +1,10 @@
 import { createServer } from "node:http";
-import { createBackend, createJsonStore, createService, parseMap } from "./service.js";
+import { createJsonStore, createService, parseMap } from "./service.js";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { acquireWriter } from "./store.js";
+import { createProjection } from "./projection.js";
+import { createKafkaRuntime, kafkaConfig } from "./consumer.js";
 import { manifest, toolSchemas } from "./contract.js";
 
 function json(response, status, body) {
@@ -25,8 +30,8 @@ export function createHttpServer(service) {
   const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
   if (request.method === "GET" && ["/health", "/healthz"].includes(url.pathname)) return json(response, 200, { status: "UP", service: "cebp-mcp-server" });
   if (request.method === "GET" && url.pathname === "/ready") {
-    try { await service.loadState(); return json(response, 200, { status: "READY" }); }
-    catch { return json(response, 503, { status: "NOT_READY", dependency: "fleet-management-service" }); }
+    const state = service.readiness();
+    return json(response, state.ready ? 200 : 503, { status: state.ready ? "READY" : "NOT_READY", dependency: "kafka-projection", diagnostic: state.diagnostic });
   }
   if (request.method === "GET" && url.pathname === "/api/v1/proposals") return json(response, 200, await service.listProposals());
   if (request.method === "GET" && url.pathname.startsWith("/api/v1/proposals/")) {
@@ -70,11 +75,29 @@ export function createHttpServer(service) {
   });
 }
 
-if (process.argv[1] && new URL(import.meta.url).pathname.toLowerCase() === new URL(`file://${process.argv[1].replaceAll("\\", "/")}`).pathname.toLowerCase()) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT ?? 8083);
-  const backendUrl = process.env.BACKEND_API_URL ?? "http://127.0.0.1:8080/api/v1/";
   const areaMap = parseMap(process.env.MCP_AREA_ZONE_MAP_JSON, "MCP_AREA_ZONE_MAP_JSON");
   const stateDir = process.env.MCP_STATE_DIR ?? "./data";
-  const service = createService({ backend: createBackend(backendUrl), areaMap, store: createJsonStore(stateDir) });
-  createHttpServer(service).listen(port, "0.0.0.0", () => process.stdout.write(`cebp-mcp-server listening on 0.0.0.0:${port}\n`));
+  const release = await acquireWriter(stateDir);
+  try {
+    const store = createJsonStore(stateDir);
+    const projection = await createProjection({ store, backendContract: process.env.MCP_BACKEND_EVENT_CONTRACT });
+    const service = createService({ snapshotProvider: projection, areaMap, store });
+    const runtime = createKafkaRuntime({ projection, ...kafkaConfig() });
+    const server = createHttpServer(service);
+    server.listen(port, "0.0.0.0", () => process.stdout.write(`cebp-mcp-server listening on 0.0.0.0:${port}\n`));
+    void runtime.start();
+    let stopping = false;
+    const stop = async () => {
+      if (stopping) return;
+      stopping = true;
+      console.log("Stopping MCP writer");
+      await Promise.all([runtime.stop(), new Promise((resolve) => server.close(resolve))]);
+      await release();
+      console.log("MCP writer stopped; state lock released");
+    };
+    process.on("SIGINT", stop);
+    process.on("SIGTERM", stop);
+  } catch (error) { await release(); throw error; }
 }
