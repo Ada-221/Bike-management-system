@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { FleetSnapshot } from "./components/FleetSnapshot";
-import { sampleVehicles } from "./data/sampleFleet";
+import { ResourceNotice } from "./components/ResourceNotice";
+import { fleetApi } from "./api/fleet";
+import { demoFleet } from "./data/sampleFleet";
+import { useFleetResource } from "./hooks/useFleetResource";
 
 const sections = ["Overview", "Fleet", "Proposals"] as const;
 type Section = (typeof sections)[number];
@@ -37,7 +40,7 @@ function MapPlaceholder() {
       </div>
       <div className="map-footer">
         <span>
-          <i className="legend-dot" /> Sample service areas
+          <i className="legend-dot" /> Illustrative service areas
         </span>
         <span>Map provider to be agreed</span>
       </div>
@@ -67,8 +70,9 @@ function ProposalPreview() {
         <button disabled>Reject</button>
       </div>
       <p className="fine-print">
-        Preview only. Decisions are unavailable until the proposal API is agreed
-        and connected. AI cannot act on its own.
+        Preview only. Proposal review is planned for Week 4. Approval records a
+        human decision; it does not execute fleet actions. AI cannot act on its
+        own.
       </p>
     </section>
   );
@@ -76,24 +80,61 @@ function ProposalPreview() {
 
 export default function App() {
   const [section, setSection] = useState<Section>("Overview");
+  const [mode, setMode] = useState<"api" | "demo">("api");
+  const source = mode === "api" ? fleetApi : demoFleet;
+  const vehicles = useFleetResource(source.listVehicles);
+  const summary = useFleetResource(source.getStatus);
+  const busy = vehicles.loading || summary.loading;
+  const demo = mode === "demo";
   const metrics = [
-    ["Total vehicles", sampleVehicles.length, "Across 2 sample areas"],
+    ["Total vehicles", summary.data?.totalVehicles, "Reported fleet total"],
     [
       "Available",
-      sampleVehicles.filter((v) => v.status === "AVAILABLE").length,
-      "Ready for a rider",
+      summary.data?.countByStatus.AVAILABLE,
+      "Vehicles marked available",
     ],
     [
-      "On a ride",
-      sampleVehicles.filter((v) => v.status === "RENTED").length,
-      "Active sample rental",
+      "Active rentals",
+      summary.data?.activeRentals,
+      "Includes trips with a fault",
     ],
     [
       "Needs attention",
-      sampleVehicles.filter((v) => v.status === "MAINTENANCE_REQUIRED").length,
+      summary.data?.countByStatus.MAINTENANCE_REQUIRED,
       "Maintenance required",
     ],
   ] as const;
+  const fleetList = (
+    <>
+      <ResourceNotice
+        name="vehicles"
+        loading={vehicles.loading}
+        error={vehicles.error}
+        hasData={vehicles.data !== null}
+        retry={vehicles.refresh}
+      />
+      {vehicles.data !== null && (
+        <FleetSnapshot
+          vehicles={vehicles.data}
+          zones={summary.data?.zones ?? []}
+          total={summary.data?.totalVehicles}
+          demo={demo}
+        />
+      )}
+      {vehicles.updatedAt && (
+        <p className="snapshot-time">
+          Vehicles fetched{" "}
+          <time dateTime={vehicles.updatedAt}>
+            {new Date(vehicles.updatedAt).toLocaleString()}
+          </time>
+          .{" "}
+          {demo
+            ? "Demo data."
+            : "Manual refresh; automatic updates are not enabled."}
+        </p>
+      )}
+    </>
+  );
 
   return (
     <div className="app-shell">
@@ -132,7 +173,7 @@ export default function App() {
             <br />
             One shared view.
           </p>
-          <span className="version">Week 01 / Interface foundation</span>
+          <span className="version">Week 02 / API foundation</span>
         </div>
       </aside>
       <div className="workspace">
@@ -143,7 +184,7 @@ export default function App() {
           </span>
           <span className="preview-badge">
             <i />
-            Synthetic data
+            {demo ? "Demo data" : "Backend data"}
           </span>
         </header>
         <main id="main-content" tabIndex={-1}>
@@ -165,22 +206,59 @@ export default function App() {
                     : "A space to inspect suggestions and record operator decisions."}
               </p>
             </div>
-            <span className="milestone-tag">Week 1 preview</span>
+            <span className="milestone-tag">Week 2</span>
           </div>
           <div className="preview-notice" role="note">
-            <strong>Interface skeleton</strong>
+            <strong>{demo ? "Demo mode" : "Fleet snapshot"}</strong>
             <span>
-              This preview uses fixed synthetic data. Backend and live updates
-              are not connected.
+              {demo
+                ? "Fixed synthetic vehicles for demonstration. This view does not read backend data."
+                : "Data is requested from the fleet service. Use Refresh to retrieve changes."}
             </span>
           </div>
+          <div className="data-toolbar">
+            <label htmlFor="data-source">Data source</label>
+            <select
+              id="data-source"
+              value={mode}
+              onChange={(event) =>
+                setMode(event.target.value as "api" | "demo")
+              }
+            >
+              <option value="api">Backend</option>
+              <option value="demo">Demo</option>
+            </select>
+            <button
+              className="action-button"
+              disabled={busy}
+              onClick={() => {
+                vehicles.refresh();
+                summary.refresh();
+              }}
+            >
+              {busy ? "Loading…" : "Refresh"}
+            </button>
+          </div>
+          <ResourceNotice
+            name="fleet summary"
+            loading={summary.loading}
+            error={summary.error}
+            hasData={summary.data !== null}
+            retry={summary.refresh}
+          />
           {section === "Overview" && (
             <>
-              <section className="metrics" aria-label="Sample fleet indicators">
+              <section
+                className="metrics"
+                aria-label="Fleet indicators"
+                aria-busy={summary.loading}
+              >
                 {metrics.map(([label, value, description], index) => (
                   <article className={`metric metric-${index}`} key={label}>
                     <p>{label}</p>
-                    <strong>{value.toString().padStart(2, "0")}</strong>
+                    <strong>
+                      {value === undefined ? "—" : value.toLocaleString()}
+                    </strong>
                     <span>{description}</span>
                   </article>
                 ))}
@@ -189,19 +267,18 @@ export default function App() {
                 <MapPlaceholder />
                 <ProposalPreview />
               </div>
-              <FleetSnapshot />
+              {fleetList}
             </>
           )}
           {section === "Fleet" && (
             <>
-              <FleetSnapshot />
+              {fleetList}
               <section className="panel future-panel">
                 <p className="eyebrow">Next milestones</p>
                 <h2>From a snapshot to live operations</h2>
                 <p>
-                  API-backed vehicle lists begin in Week 2. Availability,
-                  battery, and maintenance filters and vehicle details follow in
-                  Week 3; SSE updates follow in Week 4.
+                  Availability, battery, and maintenance filters and vehicle
+                  details follow in Week 3; SSE updates follow in Week 4.
                 </p>
               </section>
             </>
@@ -219,15 +296,15 @@ export default function App() {
                   <li>See the recorded decision and audit history.</li>
                 </ol>
                 <p>
-                  The proposal transport contract is pending agreement between
-                  the backend and AI/MCP owners.
+                  This layout does not submit decisions or execute fleet
+                  actions. Proposal API integration is planned for Week 4.
                 </p>
               </section>
             </div>
           )}
           <footer className="page-footer">
             <span>CEBP / E-bike & scooter fleet management</span>
-            <span>Person 3 · Frontend / Week 1</span>
+            <span>Person 3 · Frontend / Week 2</span>
           </footer>
         </main>
       </div>

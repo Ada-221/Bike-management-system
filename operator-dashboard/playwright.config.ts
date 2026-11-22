@@ -2,6 +2,8 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
+  outputDir: "./test-results/browser",
+  testMatch: ["**/api.spec.ts", "**/dashboard.spec.ts"],
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
