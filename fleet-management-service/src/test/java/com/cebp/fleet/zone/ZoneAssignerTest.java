@@ -3,8 +3,14 @@ package com.cebp.fleet.zone;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.cebp.fleet.common.Geo;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 
 class ZoneAssignerTest {
@@ -47,5 +53,31 @@ class ZoneAssignerTest {
         // 0.001 degrees of latitude is about 111 m everywhere.
         assertThat(Geo.distanceMeters(48.0, 16.0, 48.001, 16.0)).isCloseTo(111.2, within(1.0));
         assertThat(Geo.distanceMeters(48.0, 16.0, 48.0, 16.0)).isZero();
+    }
+
+    @Test
+    void zoneListIsReadOnceAcrossManyLookupsAndReloadedAfterTtlOrInvalidate() {
+        ZoneRepository repository = mock(ZoneRepository.class);
+        when(repository.findAll()).thenReturn(List.of(CITY_CENTER, SOUTH));
+        AtomicLong nanos = new AtomicLong();
+        ZoneAssigner assigner = new ZoneAssigner(repository, 60, nanos::get);
+
+        for (int i = 0; i < 50; i++) {
+            assertThat(assigner.zoneIdFor(48.2102, 16.3598)).isEqualTo("zone_001");
+            assertThat(assigner.zoneIdFor(48.30, 16.50)).isNull();
+        }
+        verify(repository, times(1)).findAll();
+
+        nanos.addAndGet(59_000_000_000L);
+        assigner.zoneIdFor(48.2102, 16.3598);
+        verify(repository, times(1)).findAll();
+
+        nanos.addAndGet(2_000_000_000L);
+        assigner.zoneIdFor(48.2102, 16.3598);
+        verify(repository, times(2)).findAll();
+
+        assigner.invalidate();
+        assigner.zoneIdFor(48.2102, 16.3598);
+        verify(repository, times(3)).findAll();
     }
 }

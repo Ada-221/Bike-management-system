@@ -25,6 +25,7 @@ services:
       FLEET_DB_USER: fleet
       FLEET_DB_PASSWORD: ${POSTGRES_PASSWORD:-fleet}
       FLEET_KAFKA_ENABLED: "true"
+      FLEET_KAFKA_DEAD_LETTER_ENABLED: ${FLEET_KAFKA_DEAD_LETTER_ENABLED:-false}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # "dev" also loads the demo zones. Remove this line for an empty zones table.
       SPRING_PROFILES_ACTIVE: dev
@@ -120,7 +121,7 @@ services:
     entrypoint: ["/bin/bash", "-ec"]
     command:
       - |
-        for topic in fleet.vehicle fleet.rental fleet.maintenance; do
+        for topic in fleet.vehicle fleet.rental fleet.maintenance fleet.vehicle.DLT; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$topic" --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=-1
         done
 

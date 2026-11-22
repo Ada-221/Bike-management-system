@@ -50,6 +50,8 @@ class VehicleControllerIT extends AbstractPostgresIT {
     private ObjectMapper objectMapper;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private com.cebp.fleet.zone.ZoneAssigner zoneAssigner;
 
     /** Captures staged events without running a Kafka broker. */
     @MockBean
@@ -57,6 +59,7 @@ class VehicleControllerIT extends AbstractPostgresIT {
 
     @BeforeEach
     void resetDatabase() {
+        zoneAssigner.invalidate();
         jdbc.execute("TRUNCATE rentals, maintenance_records, vehicles, zones, processed_events");
         jdbc.update("insert into zones (id, name, center_latitude, center_longitude, radius_meters) "
                 + "values ('zone_001', 'City Center', 48.2100, 16.3600, 800)");

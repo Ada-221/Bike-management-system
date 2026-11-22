@@ -82,11 +82,13 @@ class RentalService {
 
         lock("rental-rider:" + riderId);
         Vehicle vehicle = fleet.lockVehicle(vehicleId);
-        if (fleet.lowBattery(vehicle)) {
-            throw new ConflictException(ErrorCode.BATTERY_TOO_LOW, "Vehicle battery is below the rental threshold.");
-        }
+        // Availability first: a RENTED or in-maintenance vehicle is "not available" whatever its battery says.
         if (vehicle.getStatus() != VehicleStatus.AVAILABLE) {
             throw new ConflictException(ErrorCode.VEHICLE_NOT_AVAILABLE, "Vehicle is " + vehicle.getStatus() + ".");
+        }
+        // Safety net: an AVAILABLE vehicle below the threshold should already be MAINTENANCE_REQUIRED.
+        if (fleet.lowBattery(vehicle)) {
+            throw new ConflictException(ErrorCode.BATTERY_TOO_LOW, "Vehicle battery is below the rental threshold.");
         }
         if (Boolean.TRUE.equals(jdbc.queryForObject("""
                 select exists(select 1 from rentals where rider_id = ? and status = 'ACTIVE')

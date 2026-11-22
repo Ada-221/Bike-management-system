@@ -70,3 +70,29 @@ Outbox publish failures log the oldest pending age in seconds. The fleet API
 can still commit while Kafka is unavailable. Delivery retries with the original
 event ID after the broker recovers. On Docker 29, a local Maven test run may
 require `mvn "-Dapi.version=1.44" verify`.
+
+## Telemetry error handling (draft)
+
+Records on `fleet.vehicle` that fail validation (`IllegalArgumentException`) can never succeed.
+With `fleet.kafka.dead-letter-enabled=true` (env `FLEET_KAFKA_DEAD_LETTER_ENABLED`) they are
+published to `fleet.vehicle.DLT` and the consumer continues. Transient failures (database or
+Kafka unavailable) are still retried every `fleet.kafka.retry-interval-ms` (5000) without limit.
+The flag is off by default, which keeps the previous behavior of retrying every failure forever.
+Compose creates the `fleet.vehicle.DLT` topic. The policy is a proposal: see
+[the dead-letter draft](../docs/integration/dead-letter-draft.md).
+
+Unknown telemetry fields are ignored. The zone list is cached for
+`fleet.zone-cache-ttl-seconds` (60); zones are read-only in this service.
+
+## `processed_events` growth and retention
+
+Every consumed telemetry event stores one row (`event_id`, `fingerprint`) in `processed_events`
+for idempotency and conflict detection, and nothing deletes them, so the table grows with
+telemetry volume. Do not add automatic deletion until the replay and retention policy is decided.
+
+Safe retention rule: a row may only be removed once the event can no longer be redelivered. That
+means the row's event must be older than the Kafka retention of `fleet.vehicle` (today
+`retention.ms=-1`, i.e. never, so nothing is safe to delete) and older than any planned replay
+window or consumer-group offset reset. If a row is deleted early and the event is redelivered, the
+duplicate is processed again and the conflicting-content check is lost. Until retention is
+bounded, monitor the table size instead.

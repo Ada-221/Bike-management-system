@@ -60,7 +60,7 @@ public class FleetTelemetry {
         String id = requiredText(event, "eventId");
         String vehicleId = requiredText(event, "vehicleId");
         String correlationId = requiredText(event, "correlationId");
-        if (event.size() != 9 || !id.matches("^evt_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$")
+        if (!id.matches("^evt_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$")
                 || !vehicleId.matches("^veh_[A-Za-z0-9][A-Za-z0-9_-]{2,35}$") || !vehicleId.equals(key)
                 || !"telemetry-ingestion-service".equals(event.path("producer").textValue())
                 || !"1.0".equals(event.path("schemaVersion").textValue())) {
@@ -149,22 +149,24 @@ public class FleetTelemetry {
         }
     }
 
+    // Required fields and their types are checked strictly. Unknown envelope or payload fields are ignored,
+    // so the producer can add optional fields without breaking this consumer (backward-compatible v1 rule).
     private static void validatePayload(String type, JsonNode payload) {
         if (!payload.isObject()) throw new IllegalArgumentException("Invalid telemetry payload");
         if (BATTERY.equals(type)) {
             JsonNode battery = payload.path("batteryPercent");
-            if (payload.size() != 1 || !battery.isIntegralNumber() || !battery.canConvertToInt()
+            if (!battery.isIntegralNumber() || !battery.canConvertToInt()
                     || battery.intValue() < 0 || battery.intValue() > 100) {
                 throw new IllegalArgumentException("Invalid telemetry battery percentage");
             }
         } else if (LOCATION.equals(type)) {
-            if (payload.size() != 2 || !coordinate(payload.path("latitude"), 90) || !coordinate(payload.path("longitude"), 180)) {
+            if (!coordinate(payload.path("latitude"), 90) || !coordinate(payload.path("longitude"), 180)) {
                 throw new IllegalArgumentException("Invalid telemetry location");
             }
         } else {
             String fault = requiredText(payload, "faultCode");
             JsonNode description = payload.path("description");
-            if (fault.length() > 50 || payload.size() != (description.isMissingNode() ? 1 : 2)
+            if (fault.length() > 50
                     || (!description.isMissingNode() && (!description.isTextual() || description.textValue().isBlank()
                     || description.textValue().length() > 500))) {
                 throw new IllegalArgumentException("Invalid telemetry fault");

@@ -43,6 +43,10 @@ logging:
 fleet:
   kafka:
     enabled: ${FLEET_KAFKA_ENABLED:false}
+    # DRAFT policy (integration-review.md): invalid fleet.vehicle records go to fleet.vehicle.DLT instead of
+    # blocking the partition. Off = old behavior (retry every failure forever).
+    dead-letter-enabled: ${FLEET_KAFKA_DEAD_LETTER_ENABLED:false}
+    retry-interval-ms: 5000
   min-rentable-battery-percent: 20
   low-battery-resolve-percent: 50
   nearby-default-radius-meters: 1000

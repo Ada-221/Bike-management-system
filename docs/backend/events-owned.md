@@ -1,121 +1,29 @@
 # Fleet Service: Events Published and Consumed
 
-The [Week 3 event contract](../../contracts/fleet/v1/README.md) defines the
-current fleet outbox envelopes and telemetry routing. The examples below
-describe the original Week 1 drafts.
+The [v1 event contract](../../contracts/fleet/v1/README.md) is the source of truth for event
+shapes. Every fleet event uses the same envelope (`schemaVersion`, `vehicleId`, `correlationId`,
+`producer`, `eventId`, `eventType`, `publishedAt`, `stateRevision`, nested `payload`). The full
+JSON Schema is [fleet-event.schema.json](../../contracts/fleet/v1/fleet-event.schema.json) and
+real examples of `VehicleRegistered`, `RentalStarted`, `VehicleMaintenanceChanged` and
+`RentalEnded` are in
+[rental-fault-return.example.json](../../contracts/fleet/v1/rental-fault-return.example.json).
+The Week 1 flat examples that used to be in this file were removed because they no longer match
+the envelope.
 
 ## 1. Events Published
 
-**Topics:** `fleet.vehicle`, `fleet.rental`, `fleet.maintenance`
-
-### 1.1 `VehicleRegistered` (topic `fleet.vehicle`)
-
-```json
-{
-  "eventId": "evt_1001",
-  "eventType": "VehicleRegistered",
-  "producer": "fleet-management-service",
-  "vehicleId": "veh_001",
-  "publishedAt": "2026-11-09T07:00:00Z",
-  "label": "EB-001",
-  "type": "E_BIKE",
-  "status": "AVAILABLE",
-  "batteryPercent": 92,
-  "latitude": 48.2102,
-  "longitude": 16.3598,
-  "zoneId": "zone_001"
-}
-```
-
-### 1.2 `RentalStarted` (topic `fleet.rental`)
-
-```json
-{
-  "eventId": "evt_1002",
-  "eventType": "RentalStarted",
-  "producer": "fleet-management-service",
-  "rentalId": "rnt_001",
-  "vehicleId": "veh_005",
-  "riderId": "rider-demo-1",
-  "startedAt": "2026-11-09T08:20:00Z",
-  "publishedAt": "2026-11-09T08:20:01Z",
-  "startLatitude": 48.1858,
-  "startLongitude": 16.3758,
-  "startBatteryPercent": 70,
-  "zoneId": "zone_002"
-}
-```
-
-### 1.3 `RentalEnded` (topic `fleet.rental`)
-
-```json
-{
-  "eventId": "evt_1003",
-  "eventType": "RentalEnded",
-  "producer": "fleet-management-service",
-  "rentalId": "rnt_001",
-  "vehicleId": "veh_005",
-  "riderId": "rider-demo-1",
-  "startedAt": "2026-11-09T08:20:00Z",
-  "endedAt": "2026-11-09T08:45:00Z",
-  "publishedAt": "2026-11-09T08:45:01Z",
-  "durationSeconds": 1500,
-  "endLatitude": 48.2099,
-  "endLongitude": 16.3605,
-  "endBatteryPercent": 58,
-  "startZoneId": "zone_002",
-  "endZoneId": "zone_001",
-  "vehicleStatusAfter": "AVAILABLE"
-}
-```
-
-### 1.4 `VehicleMaintenanceChanged` (topic `fleet.maintenance`)
-
-```json
-{
-  "eventId": "evt_1004",
-  "eventType": "VehicleMaintenanceChanged",
-  "producer": "fleet-management-service",
-  "maintenanceId": "mnt_001",
-  "vehicleId": "veh_011",
-  "reason": "LOW_BATTERY",
-  "previousStatus": null,
-  "newStatus": "OPEN",
-  "faultCode": null,
-  "vehicleStatus": "MAINTENANCE_REQUIRED",
-  "changedAt": "2026-11-09T07:30:00Z",
-  "publishedAt": "2026-11-09T07:30:01Z"
-}
-```
-
----
+| Topic | Event | Producer |
+|---|---|---|
+| `fleet.vehicle` | `VehicleRegistered`, `VehicleStateUpdated` | fleet-management-service |
+| `fleet.rental` | `RentalStarted`, `RentalEnded` | fleet-management-service |
+| `fleet.maintenance` | `VehicleMaintenanceChanged` | fleet-management-service |
 
 ## 2. Events Consumed
 
-```json
-{
-  "eventId": "evt_2001",
-  "eventType": "VehicleBatteryUpdated",
-  "producer": "telemetry-ingestion-service",
-  "vehicleId": "veh_001",
-  "measuredAt": "2026-11-09T08:15:00Z",
-  "publishedAt": "2026-11-09T08:15:02Z",
-  "batteryPercent": 64
-}
-```
-
-```json
-{
-  "eventId": "evt_2002",
-  "eventType": "VehicleLocationUpdated",
-  "producer": "telemetry-ingestion-service",
-  "vehicleId": "veh_001",
-  "measuredAt": "2026-11-09T08:15:05Z",
-  "publishedAt": "2026-11-09T08:15:07Z",
-  "latitude": 48.2105,
-  "longitude": 16.3601
-}
-```
+Telemetry shapes (`VehicleBatteryUpdated`, `VehicleLocationUpdated`, `VehicleFaultReported`) are
+owned by telemetry-ingestion; see the [fault schema](../../fault.schema.json) and the
+[telemetry schema](../../telemetry.schema.json). Fleet validates required fields and ignores
+unknown additional fields in the envelope and payload.
 
 | Event | Producer | Payload Requirements | Action / Rule Applied |
 |---|---|---|---|

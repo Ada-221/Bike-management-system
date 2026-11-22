@@ -68,8 +68,12 @@ public class VehicleService {
             throw e;
         }
 
+        // Reserve the registration event id (and so its stateRevision) before any maintenance event is
+        // created, so consumers never see maintenance for a vehicle whose registration has a later revision.
+        // The event is emitted last so its payload carries the final status.
+        String registeredEventId = ids.nextEventId();
         maintenance.applyBattery(vehicle, now);
-        fleet.emit(Topics.FLEET_VEHICLE, "VehicleRegistered", vehicle, now, Map.of(
+        fleet.emit(registeredEventId, Topics.FLEET_VEHICLE, "VehicleRegistered", vehicle, now, Map.of(
                 "batteryPercent", vehicle.getBatteryPercent(), "latitude", vehicle.getLatitude(),
                 "longitude", vehicle.getLongitude(), "batteryMeasuredAt", vehicle.getLastBatteryAt(),
                 "locationMeasuredAt", vehicle.getLastLocationAt()));
@@ -120,13 +124,35 @@ public class VehicleService {
         int threshold = minBattery == null ? props.minRentableBatteryPercent()
                 : Math.max(minBattery, props.minRentableBatteryPercent());
         double latitudeDelta = Geo.latitudeDelta(radius);
-        return vehicles.findByStatusAndBatteryPercentGreaterThanEqualAndLatitudeBetween(
-                        VehicleStatus.AVAILABLE, threshold, lat - latitudeDelta, lat + latitudeDelta).stream()
+        return candidates(lat, lon, radius, threshold, latitudeDelta).stream()
                 .map(v -> new Nearby(v, Geo.distanceMeters(lat, lon, v.getLatitude(), v.getLongitude())))
                 .filter(candidate -> candidate.distanceMeters() <= radius)
                 .sorted(Comparator.comparingDouble(Nearby::distanceMeters)
                         .thenComparing(candidate -> candidate.vehicle().getId()))
                 .limit(effectiveLimit).toList();
+    }
+
+    /** Cheap bounding-box pre-filter in the database; the exact haversine check happens afterwards. */
+    private List<Vehicle> candidates(double lat, double lon, int radius, int threshold, double latitudeDelta) {
+        double minLat = lat - latitudeDelta;
+        double maxLat = lat + latitudeDelta;
+        double longitudeDelta = Geo.longitudeDelta(lat, radius);
+        if (longitudeDelta >= 180) {   // the circle reaches a pole: longitude cannot narrow the search
+            return vehicles.findByStatusAndBatteryPercentGreaterThanEqualAndLatitudeBetween(
+                    VehicleStatus.AVAILABLE, threshold, minLat, maxLat);
+        }
+        double minLon = lon - longitudeDelta;
+        double maxLon = lon + longitudeDelta;
+        if (minLon < -180) {           // window spills over the antimeridian to the west
+            return vehicles.findInWrappedLongitudeWindow(VehicleStatus.AVAILABLE, threshold, minLat, maxLat,
+                    minLon + 360, maxLon);
+        }
+        if (maxLon > 180) {            // ... or to the east
+            return vehicles.findInWrappedLongitudeWindow(VehicleStatus.AVAILABLE, threshold, minLat, maxLat,
+                    minLon, maxLon - 360);
+        }
+        return vehicles.findByStatusAndBatteryPercentGreaterThanEqualAndLatitudeBetweenAndLongitudeBetween(
+                VehicleStatus.AVAILABLE, threshold, minLat, maxLat, minLon, maxLon);
     }
 
     /** Only the label can be changed; status, battery and location are system-controlled. */

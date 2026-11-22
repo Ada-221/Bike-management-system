@@ -34,9 +34,11 @@ class FleetLifecycleIT extends AbstractPostgresIT {
     @Autowired private FleetTelemetry telemetry;
     @Autowired private VehicleService vehicles;
     @Autowired private TransactionTemplate transactions;
+    @Autowired private com.cebp.fleet.zone.ZoneAssigner zoneAssigner;
 
     @BeforeEach
     void reset() {
+        zoneAssigner.invalidate();
         jdbc.execute("truncate fleet_outbox, rentals, maintenance_records, vehicles, processed_events, zones");
         jdbc.update("""
                 insert into zones (id, name, center_latitude, center_longitude, radius_meters)
@@ -154,6 +156,88 @@ class FleetLifecycleIT extends AbstractPostgresIT {
         assertThat(jdbc.queryForObject("select count(*) from maintenance_records", Integer.class)).isZero();
     }
 
+    @Test
+    void lowBatteryRegistrationEmitsRegisteredBeforeMaintenanceWithFinalStatus() throws Exception {
+        register("Low at registration", 15, 48.21);
+        long registered = revision("VehicleRegistered");
+        long maintenance = revision("VehicleMaintenanceChanged");
+        assertThat(registered).isLessThan(maintenance);
+        assertThat(jdbc.queryForObject("""
+                select body->'payload'->>'status' from fleet_outbox where body->>'eventType' = 'VehicleRegistered'
+                """, String.class)).isEqualTo("MAINTENANCE_REQUIRED");
+    }
+
+    @Test
+    void rentedVehicleWithLowBatteryIsNotAvailableRatherThanBatteryTooLow() throws Exception {
+        String vehicle = register("Rented then low", 90, 48.21);
+        send(start(vehicle, "rider-a", "t3-first-key"), 201);
+        Instant t = Instant.now();
+        sendBattery(vehicle, "evt_t3_low", t, t, 10);
+        http.perform(get("/vehicles/" + vehicle)).andExpect(jsonPath("$.status").value("RENTED"));
+
+        assertThat(send(start(vehicle, "rider-b", "t3-second-key"), 409).path("code").asText())
+                .isEqualTo("VEHICLE_NOT_AVAILABLE");
+    }
+
+    @Test
+    void telemetryWithAdditiveFieldsIsAppliedButMissingOrIllTypedRequiredFieldsAreRejected() throws Exception {
+        String vehicle = register("Additive fields", 80, 48.21);
+        Instant t = Instant.now();
+        telemetry.consume(vehicle, extended(vehicle, "evt_add_battery", "VehicleBatteryUpdated", t,
+                Map.of("batteryPercent", 70, "voltage", 41.5)));
+        telemetry.consume(vehicle, extended(vehicle, "evt_add_location", "VehicleLocationUpdated", t,
+                Map.of("latitude", 48.1858, "longitude", 16.3758, "accuracyMeters", 5)));
+        telemetry.consume(vehicle, extended(vehicle, "evt_add_fault", "VehicleFaultReported", t,
+                Map.of("faultCode", "MOTOR", "severity", "HIGH")));
+        http.perform(get("/vehicles/" + vehicle)).andExpect(jsonPath("$.batteryPercent").value(70))
+                .andExpect(jsonPath("$.zoneId").value("zone_002"))
+                .andExpect(jsonPath("$.status").value("MAINTENANCE_REQUIRED"));
+
+        assertThatThrownBy(() -> telemetry.consume(vehicle, extended(vehicle, "evt_bad_1", "VehicleBatteryUpdated", t,
+                Map.of("voltage", 41.5)))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> telemetry.consume(vehicle, extended(vehicle, "evt_bad_2", "VehicleBatteryUpdated", t,
+                Map.of("batteryPercent", "70")))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> telemetry.consume(vehicle, extended(vehicle, "evt_bad_3", "VehicleLocationUpdated", t,
+                Map.of("latitude", 48.2)))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> telemetry.consume(vehicle, extended(vehicle, "evt_bad_4", "VehicleFaultReported", t,
+                Map.of("severity", "HIGH")))).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void nearbyUsesALongitudeBoxAndWorksAcrossTheAntimeridian() throws Exception {
+        String east = registerAt("East of line", 0.0, 179.9995);
+        String west = registerAt("West of line", 0.0, -179.9995);
+        registerAt("Far away", 0.0, 170.0);
+        registerAt("Just outside", 0.0, 179.9999 - 0.0095);   // about 1.05 km west of the query point
+
+        http.perform(get("/vehicles/nearby").param("lat", "0").param("lon", "179.9999").param("radiusMeters", "1000"))
+                .andExpect(jsonPath("$.length()").value(2)).andExpect(jsonPath("$[0].id").value(east))
+                .andExpect(jsonPath("$[1].id").value(west));
+        http.perform(get("/vehicles/nearby").param("lat", "0").param("lon", "-179.9999").param("radiusMeters", "1000"))
+                .andExpect(jsonPath("$.length()").value(2)).andExpect(jsonPath("$[0].id").value(west));
+    }
+
+    @Test
+    void nearbyExcludesVehiclesInsideTheLatitudeBandButOutsideTheLongitudeBox() throws Exception {
+        String inside = registerAt("Inside", 48.21, 16.3600);
+        registerAt("East 1.5km", 48.21, 16.3600 + 0.0202);   // same latitude, about 1.5 km east at 48.21 N
+
+        http.perform(get("/vehicles/nearby").param("lat", "48.21").param("lon", "16.36").param("radiusMeters", "1000"))
+                .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(inside));
+    }
+
+    private long revision(String type) {
+        return jdbc.queryForObject("select state_revision from fleet_outbox where body->>'eventType' = ?", Long.class, type);
+    }
+
+    private String extended(String vehicle, String id, String type, Instant t, Map<String, Object> payload) throws Exception {
+        Map<String, Object> envelope = new java.util.LinkedHashMap<>(Map.of("eventType", type, "eventId", id,
+                "schemaVersion", "1.0", "vehicleId", vehicle, "correlationId", "corr_test",
+                "producer", "telemetry-ingestion-service", "measuredAt", t, "publishedAt", t, "payload", payload));
+        envelope.put("traceId", "extra-envelope-field");
+        return json.writeValueAsString(envelope);
+    }
+
     private int eventCount(String type) {
         return jdbc.queryForObject("select count(*) from fleet_outbox where body->>'eventType' = ?", Integer.class, type);
     }
@@ -161,6 +245,11 @@ class FleetLifecycleIT extends AbstractPostgresIT {
     private String register(String label, int battery, double latitude) throws Exception {
         return send(post("/vehicles").content(json.writeValueAsString(Map.of("label", label, "type", "E_BIKE",
                 "batteryPercent", battery, "latitude", latitude, "longitude", 16.36))), 201).path("id").asText();
+    }
+
+    private String registerAt(String label, double latitude, double longitude) throws Exception {
+        return send(post("/vehicles").content(json.writeValueAsString(Map.of("label", label, "type", "E_BIKE",
+                "batteryPercent", 90, "latitude", latitude, "longitude", longitude))), 201).path("id").asText();
     }
 
     private MockHttpServletRequestBuilder start(String vehicle, String rider, String key) throws Exception {
