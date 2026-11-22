@@ -20,6 +20,19 @@ class TelemetryIngestion {
 
     CompletableFuture<Void> publish(TelemetryMeasurement measurement)
             throws JsonProcessingException {
+        return publishInternal(measurement, false);
+    }
+
+    /** Send the exact same JSON (including eventId) twice to test consumer idempotency. */
+    CompletableFuture<Void> publishExactDuplicateEvents(TelemetryMeasurement measurement)
+            throws JsonProcessingException {
+        return publishInternal(measurement, true);
+    }
+
+    private CompletableFuture<Void> publishInternal(TelemetryMeasurement measurement, boolean duplicate)
+            throws JsonProcessingException {
+        TelemetryValidator.validate(measurement); // reject before ANY Kafka sends
+
         String correlationId = "corr_" + UUID.randomUUID();
         Instant publishedAt = Instant.now();
 
@@ -38,10 +51,31 @@ class TelemetryIngestion {
 
         String batteryJson = serializer.toJson(battery);
         String locationJson = serializer.toJson(location);
+        String key = measurement.vehicleId();
 
+        // For a duplicate test, wait for each acknowledgement before replaying
+        // the same bytes. New events would have new IDs and test the wrong behavior.
+        if (duplicate) {
+            return kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, batteryJson)
+                    .thenCompose(r -> kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, batteryJson))
+                    .thenCompose(r -> kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, locationJson))
+                    .thenCompose(r -> kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, locationJson))
+                    .thenApply(r -> null);
+        }
         return CompletableFuture.allOf(
-                kafka.send(TelemetryApplication.VEHICLE_TOPIC, measurement.vehicleId(), batteryJson),
-                kafka.send(TelemetryApplication.VEHICLE_TOPIC, measurement.vehicleId(), locationJson)
+                kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, batteryJson),
+                kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, locationJson)
         );
+    }
+
+    /** Week 3 fleet integration also supports fault reports on fleet.vehicle. */
+    CompletableFuture<Void> publishFault(String vehicleId, Instant measuredAt, String code, String description)
+            throws JsonProcessingException {
+        TelemetryValidator.validateFault(vehicleId, measuredAt, code, description);
+        VehicleEvent fault = new VehicleEvent("evt_" + UUID.randomUUID(), "VehicleFaultReported", "1.0",
+                measuredAt, Instant.now(), vehicleId, "corr_" + UUID.randomUUID(),
+                "telemetry-ingestion-service", new VehicleEvent.Fault(code, description));
+        return kafka.send(TelemetryApplication.VEHICLE_TOPIC, vehicleId, serializer.toJson(fault))
+                .thenApply(r -> null);
     }
 }
