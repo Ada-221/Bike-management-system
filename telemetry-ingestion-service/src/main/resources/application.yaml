@@ -3,3 +3,10 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
     admin:
       fail-fast: true
+
+telemetry:
+  simulator:
+    scenario: ${TELEMETRY_SIMULATOR_SCENARIO:baseline}
+    vehicle-id: ${TELEMETRY_SIMULATOR_VEHICLE_ID:veh_001}
+    start-at: ${TELEMETRY_SIMULATOR_START_AT:}
+    replay-at: ${TELEMETRY_SIMULATOR_REPLAY_AT:2026-11-05T20:00:00Z}

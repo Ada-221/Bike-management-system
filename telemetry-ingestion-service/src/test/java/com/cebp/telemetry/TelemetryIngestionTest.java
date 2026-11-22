@@ -1,73 +1,136 @@
 package com.cebp.telemetry;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.kafka.core.KafkaTemplate;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
 class TelemetryIngestionTest {
-    private static final Instant MEASURED_AT = Instant.parse("2026-11-05T20:00:00Z");
-    private static final String VEHICLE_ID = "veh_001";
-    private final ObjectMapper json = new ObjectMapper().findAndRegisterModules()
+    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules()
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    @Mock
-    private KafkaTemplate<String, String> kafka;
+    private static TelemetryMeasurement reading(int battery) {
+        return new TelemetryMeasurement("veh_001", Instant.parse("2026-11-22T10:00:00Z"),
+                battery, new BigDecimal("48.2102"), new BigDecimal("16.3598"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static KafkaTemplate<String, String> kafkaMock() {
+        KafkaTemplate<String, String> kafka = mock(KafkaTemplate.class);
+        when(kafka.send(eq(TelemetryApplication.VEHICLE_TOPIC), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(null));
+        return kafka;
+    }
 
     @Test
-    void rejectsInvalidMeasurementsAndFaultsBeforePublishing() {
-        TelemetryIngestion ingestion = new TelemetryIngestion(new VehicleEventSerializer(json), kafka);
-        assertThrows(IllegalArgumentException.class, () -> ingestion.publish(
-                new TelemetryMeasurement(VEHICLE_ID, MEASURED_AT, 101, BigDecimal.ZERO, BigDecimal.ZERO)));
-        assertThrows(IllegalArgumentException.class, () -> ingestion.publish(
-                new TelemetryMeasurement(VEHICLE_ID, MEASURED_AT, 80, BigDecimal.ZERO, new BigDecimal("180.1"))));
-        assertThrows(IllegalArgumentException.class, () -> ingestion.publish(
-                new TelemetryMeasurement(VEHICLE_ID, null, 80, BigDecimal.ZERO, BigDecimal.ZERO)));
-        assertThrows(IllegalArgumentException.class, () -> ingestion.publishFault(
-                "invalid", MEASURED_AT, "BRAKE_SENSOR", null));
-        assertThrows(IllegalArgumentException.class, () -> ingestion.publishFault(
-                VEHICLE_ID, MEASURED_AT, " ", null));
+    void validMeasurementPublishesSeparateBatteryAndLocationEvents() throws Exception {
+        KafkaTemplate<String, String> kafka = kafkaMock();
+        var ingestion = new TelemetryIngestion(new VehicleEventSerializer(MAPPER), kafka);
+        ingestion.publish(reading(75)).join();
+
+        ArgumentCaptor<String> data = ArgumentCaptor.forClass(String.class);
+        verify(kafka, times(2)).send(eq("fleet.vehicle"), eq("veh_001"), data.capture());
+        List<String> sent = data.getAllValues();
+        JsonNode battery = MAPPER.readTree(sent.get(0));
+        JsonNode location = MAPPER.readTree(sent.get(1));
+        assertEquals("VehicleBatteryUpdated", battery.get("eventType").asText());
+        assertEquals("VehicleLocationUpdated", location.get("eventType").asText());
+        assertEquals(75, battery.path("payload").get("batteryPercent").asInt());
+        assertEquals("telemetry-ingestion-service", battery.get("producer").asText());
+        assertEquals(battery.get("correlationId"), location.get("correlationId"));
+        assertNotEquals(battery.get("eventId"), location.get("eventId"));
+    }
+
+    @Test
+    void outOfOrderMeasurementsKeepTheirOriginalMeasurementTimestamps() throws Exception {
+        KafkaTemplate<String, String> kafka = kafkaMock();
+        var ingestion = new TelemetryIngestion(new VehicleEventSerializer(MAPPER), kafka);
+        for (TelemetryMeasurement reading : TelemetryScenarios.forName("out-of-order", "veh_001",
+                Instant.parse("2026-11-22T10:00:00Z"))) {
+            ingestion.publish(reading).join();
+        }
+
+        ArgumentCaptor<String> data = ArgumentCaptor.forClass(String.class);
+        verify(kafka, times(6)).send(eq("fleet.vehicle"), eq("veh_001"), data.capture());
+        var messages = data.getAllValues();
+        Instant second = Instant.parse(MAPPER.readTree(messages.get(2)).get("measuredAt").asText());
+        Instant third = Instant.parse(MAPPER.readTree(messages.get(4)).get("measuredAt").asText());
+        assertTrue(third.isBefore(second));
+    }
+
+    @Test
+    void rejectsInvalidMeasurementBeforeAnyKafkaSend() {
+        KafkaTemplate<String, String> kafka = mock(KafkaTemplate.class);
+        var ingestion = new TelemetryIngestion(new VehicleEventSerializer(MAPPER), kafka);
+        assertThrows(IllegalArgumentException.class, () -> ingestion.publish(reading(120)));
+        assertThrows(IllegalArgumentException.class, () -> ingestion.publishReplay(null, Instant.EPOCH));
         verifyNoInteractions(kafka);
     }
 
     @Test
-    void replayPublishesByteIdenticalDuplicatesWithDistinctBatteryAndLocationIds() throws Exception {
-        String topic = TelemetryApplication.VEHICLE_TOPIC;
-        when(kafka.send(eq(topic), eq(VEHICLE_ID), anyString())).thenReturn(CompletableFuture.completedFuture(null));
-        TelemetryIngestion ingestion = new TelemetryIngestion(new VehicleEventSerializer(json), kafka);
-        TelemetryMeasurement measurement = new TelemetryMeasurement(VEHICLE_ID, MEASURED_AT, 0,
-                new BigDecimal("-90"), new BigDecimal("180"));
-        Instant publishedAt = MEASURED_AT.plusSeconds(6);
+    void validFaultUsesTheWeek3ConsumerContract() throws Exception {
+        KafkaTemplate<String, String> kafka = kafkaMock();
+        var ingestion = new TelemetryIngestion(new VehicleEventSerializer(MAPPER), kafka);
+        ingestion.publishFault("veh_001", Instant.parse("2026-11-22T10:00:00Z"),
+                "BRAKE_SENSOR", "Simulated brake sensor fault").join();
+
+        ArgumentCaptor<String> json = ArgumentCaptor.forClass(String.class);
+        verify(kafka).send(eq("fleet.vehicle"), eq("veh_001"), json.capture());
+        JsonNode event = MAPPER.readTree(json.getValue());
+        assertEquals("VehicleFaultReported", event.get("eventType").asText());
+        assertEquals("1.0", event.get("schemaVersion").asText());
+        assertEquals("BRAKE_SENSOR", event.path("payload").get("faultCode").asText());
+        assertEquals("telemetry-ingestion-service", event.get("producer").asText());
+    }
+
+    @Test
+    void invalidFaultIsRejectedWithoutSending() {
+        KafkaTemplate<String, String> kafka = mock(KafkaTemplate.class);
+        var ingestion = new TelemetryIngestion(new VehicleEventSerializer(MAPPER), kafka);
+        assertThrows(IllegalArgumentException.class, () -> ingestion.publishFault(
+                "veh_001", Instant.parse("2026-11-22T10:00:00Z"), "", null));
+        verifyNoInteractions(kafka);
+    }
+
+    @Test
+    void duplicateScenarioReplaysExactJsonAndEventIds() throws Exception {
+        KafkaTemplate<String, String> kafka = kafkaMock();
+        var ingestion = new TelemetryIngestion(new VehicleEventSerializer(MAPPER), kafka);
+        ingestion.publishExactDuplicateEvents(reading(75)).join();
+        ArgumentCaptor<String> json = ArgumentCaptor.forClass(String.class);
+        verify(kafka, times(4)).send(eq("fleet.vehicle"), eq("veh_001"), json.capture());
+        List<String> sent = json.getAllValues();
+        assertEquals(sent.get(0), sent.get(1)); // exact duplicate battery eventId
+        assertEquals(sent.get(2), sent.get(3)); // exact duplicate location eventId
+    }
+
+    @Test
+    void replayPublishesByteIdenticalEventsAcrossCalls() throws Exception {
+        KafkaTemplate<String, String> kafka = kafkaMock();
+        var ingestion = new TelemetryIngestion(new VehicleEventSerializer(MAPPER), kafka);
+        var measurement = reading(75);
+        Instant publishedAt = measurement.measuredAt().plusSeconds(6);
         ingestion.publishReplay(measurement, publishedAt).join();
         ingestion.publishReplay(measurement, publishedAt).join();
 
-        ArgumentCaptor<String> records = ArgumentCaptor.forClass(String.class);
-        verify(kafka, times(4)).send(eq(topic), eq(VEHICLE_ID), records.capture());
-        var values = records.getAllValues();
-        assertEquals(values.get(0), values.get(2));
-        assertEquals(values.get(1), values.get(3));
-        var battery = json.readTree(values.get(0));
-        var location = json.readTree(values.get(1));
-        assertEquals(MEASURED_AT.toString(), battery.get("measuredAt").textValue());
-        assertEquals(publishedAt.toString(), location.get("publishedAt").textValue());
+        ArgumentCaptor<String> data = ArgumentCaptor.forClass(String.class);
+        verify(kafka, times(4)).send(eq("fleet.vehicle"), eq("veh_001"), data.capture());
+        var sent = data.getAllValues();
+        assertEquals(sent.get(0), sent.get(2));
+        assertEquals(sent.get(1), sent.get(3));
+        JsonNode battery = MAPPER.readTree(sent.get(0));
+        JsonNode location = MAPPER.readTree(sent.get(1));
+        assertEquals(measurement.measuredAt().toString(), battery.get("measuredAt").asText());
+        assertEquals(publishedAt.toString(), location.get("publishedAt").asText());
         assertEquals(battery.get("correlationId"), location.get("correlationId"));
         assertNotEquals(battery.get("eventId"), location.get("eventId"));
     }

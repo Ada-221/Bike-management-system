@@ -1,6 +1,5 @@
 package com.cebp.telemetry;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -16,54 +15,48 @@ class TelemetrySimulator implements ApplicationRunner {
     private final TelemetryIngestion ingestion;
     private final String vehicleId;
     private final String scenario;
+    private final String fixedStart;
     private final String replayAt;
 
     TelemetrySimulator(TelemetryIngestion ingestion,
                        @Value("${telemetry.simulator.vehicle-id:veh_001}") String vehicleId,
                        @Value("${telemetry.simulator.scenario:baseline}") String scenario,
+                       @Value("${telemetry.simulator.start-at:}") String fixedStart,
                        @Value("${telemetry.simulator.replay-at:2026-11-05T20:00:00Z}") String replayAt) {
         this.ingestion = ingestion;
         this.vehicleId = vehicleId;
         this.scenario = scenario;
+        this.fixedStart = fixedStart;
         this.replayAt = replayAt;
     }
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
-        if ("fault".equals(scenario)) {
-            ingestion.publishFault(vehicleId, Instant.now(), "BRAKE_SENSOR", "Simulated brake sensor fault").get();
-            return;
-        }
         if ("replay".equals(scenario)) {
-            replay(Instant.parse(replayAt));
+            Instant start = Instant.parse(replayAt);
+            for (TelemetryMeasurement reading : TelemetryScenarios.forName(scenario, vehicleId, start)) {
+                ingestion.publishReplay(reading, start.plusSeconds(6)).get();
+            }
             return;
         }
-        if (!"baseline".equals(scenario)) throw new IllegalArgumentException("Unknown telemetry scenario: " + scenario);
-        Instant start = Instant.now().minusSeconds(5);
-        List<TelemetryMeasurement> measurements = List.of(
-                new TelemetryMeasurement(vehicleId, start, 75,
-                        new BigDecimal("48.2102"), new BigDecimal("16.3598")),
-                new TelemetryMeasurement(vehicleId, start.plusSeconds(5), 74,
-                        new BigDecimal("48.2104"), new BigDecimal("16.3600"))
-        );
+        Instant start = fixedStart.isBlank() ? Instant.now()
+                : Instant.parse(fixedStart);
 
-        for (TelemetryMeasurement measurement : measurements) {
-            ingestion.publish(measurement).get();
-            System.out.println("Published measurement for " + measurement.vehicleId()
-                    + " with battery " + measurement.batteryPercent() + "%");
+        if ("fault".equals(scenario)) {
+            ingestion.publishFault(vehicleId, start, "BRAKE_SENSOR", "Simulated brake sensor fault").get();
+            System.out.println("Published fault telemetry for " + vehicleId);
+            return;
         }
-    }
-
-    private void replay(Instant start) throws Exception {
-        Instant publishedAt = start.plusSeconds(6);
-        TelemetryMeasurement first = new TelemetryMeasurement(vehicleId, start, 70,
-                new BigDecimal("48.2101"), new BigDecimal("16.3599"));
-        TelemetryMeasurement latest = new TelemetryMeasurement(vehicleId, start.plusSeconds(5), 65,
-                new BigDecimal("48.2105"), new BigDecimal("16.3605"));
-        TelemetryMeasurement late = new TelemetryMeasurement(vehicleId, start.plusSeconds(2), 68,
-                new BigDecimal("48.2102"), new BigDecimal("16.3602"));
-        for (TelemetryMeasurement measurement : List.of(first, latest, first, late)) {
-            ingestion.publishReplay(measurement, publishedAt).get();
+        List<TelemetryMeasurement> readings = TelemetryScenarios.forName(scenario, vehicleId, start);
+        for (TelemetryMeasurement reading : readings) {
+            if ("duplicate-event".equals(scenario)) {
+                ingestion.publishExactDuplicateEvents(reading).get();
+            } else {
+                ingestion.publish(reading).get();
+            }
+            System.out.println("Published " + scenario + " telemetry for " + reading.vehicleId()
+                    + " measured at " + reading.measuredAt()
+                    + " with battery " + reading.batteryPercent() + "%");
         }
     }
 }

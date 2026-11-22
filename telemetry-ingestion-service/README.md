@@ -1,32 +1,77 @@
-# Week 3 telemetry demo
+# Week 3 telemetry producer — validation and deterministic scenarios
 
-The normal stack and the telemetry profile leave the simulator disabled.
-Register a vehicle through the fleet API first. The simulator targets
-`veh_001` by default. Set `TELEMETRY_SIMULATOR_VEHICLE_ID` if registration
-returns a different ID.
+This service publishes `VehicleBatteryUpdated`, `VehicleLocationUpdated`, and
+`VehicleFaultReported` records to Kafka topic `fleet.vehicle`, keyed by vehicle ID.
+The producer validates readings before sending. The fleet backend applies events
+to the database, deduplicates IDs, and ignores stale measurements.
 
-Run the one-shot simulator from the repository root.
+## Run unit tests
+
+From the repository root:
 
 ```bash
-docker compose --profile telemetry run --rm -e TELEMETRY_SIMULATOR_ENABLED=true -e SPRING_MAIN_WEB_APPLICATION_TYPE=none telemetry
+mvn -f telemetry-ingestion-service/pom.xml test
 ```
 
-The baseline scenario publishes two battery readings (75% then 74%) and two
-locations. Wait for the fleet API to report 74%. To report a brake sensor
-fault, add `-e TELEMETRY_SIMULATOR_SCENARIO=fault` before `telemetry` in the
-same command. The fleet API reports `MAINTENANCE_REQUIRED` even during a
-trip. The rider can still return the active rental.
+## Run scenarios
 
-Set `TELEMETRY_SIMULATOR_SCENARIO=replay` to publish newer, duplicate, and late
-battery and location measurements. For the same vehicle and
-`TELEMETRY_SIMULATOR_REPLAY_AT` (UTC ISO timestamp), the same records are emitted
-in the same order. For a live check, choose a time newer than the registration
-and the vehicle's latest readings. The final battery should be 65% and the
-location should be `48.2105, 16.3605`. The default date is fixed for fixture replay.
+Register a vehicle with the fleet API first; use the returned ID. The default
+simulator ID is `veh_001`. Run Kafka and the telemetry image from the repo root:
 
-Use `node scripts/compose-smoke.mjs` to check real telemetry against fleet REST
-and MCP on a fresh broker. See the [telemetry contract](../telemetry-contract.md)
-for event shapes and [fleet contract](../contracts/fleet/v1/README.md) for routing.
+```bash
+docker compose --profile telemetry up --build -d --wait kafka
+docker compose --profile telemetry build telemetry
+```
 
-Compose connects to `kafka:9092`. The standalone broker default is
-`localhost:29092`. Set `KAFKA_BOOTSTRAP_SERVERS` to use a different broker.
+Start one one-shot simulator run with a selected scenario:
+
+```bash
+docker compose --profile telemetry run --rm \
+  -e TELEMETRY_SIMULATOR_ENABLED=true \
+  -e SPRING_MAIN_WEB_APPLICATION_TYPE=none \
+  -e TELEMETRY_SIMULATOR_VEHICLE_ID=veh_001 \
+  -e TELEMETRY_SIMULATOR_SCENARIO=out-of-order telemetry
+```
+
+Choose `baseline` (or `normal`), `out-of-order`, `duplicate-event`, `replay`, or `fault`.
+
+- `baseline`: 2 battery and 2 location events (75% then 74%).
+- `out-of-order`: newer measurement followed by an older measurement;
+  downstream state should retain the newer battery/location.
+- `duplicate-event`: 2 battery and 2 location deliveries with the **same
+  original IDs and JSON** (4 messages total); downstream application should
+  count each event ID only once.
+- `replay`: combines duplicates and late battery and location measurements.
+  For the same vehicle and `TELEMETRY_SIMULATOR_REPLAY_AT` (UTC ISO timestamp),
+  it emits the same records, including IDs, in the same order. The default date
+  is fixed for fixture replay. For a live check, choose a time newer than the
+  registration and the vehicle's latest readings. The final battery should be
+  65% and the location should be `48.2105, 16.3605`.
+- `fault`: one `VehicleFaultReported` for the configured vehicle. Fleet marks it
+  `MAINTENANCE_REQUIRED`. The rider can still return an active rental.
+
+For scenarios other than `replay`, supply
+`TELEMETRY_SIMULATOR_START_AT=2026-11-22T12:00:00Z` to repeat the exact
+`measuredAt` timestamps; omit it for fresh live demos. Do not use an old
+fixed timestamp for a newly registered vehicle: the fleet backend can
+correctly reject historical measurements as stale.
+
+You can inspect the raw Kafka records with:
+
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka:9092 --topic fleet.vehicle \
+  --from-beginning --property print.key=true --max-messages 4 --timeout-ms 10000
+```
+
+The topic may contain older records, so compare event IDs/timestamps rather
+than treating old messages as the latest run. Run `node scripts/compose-smoke.mjs`
+from the repository root to verify telemetry replay against fleet REST and MCP
+on a fresh broker.
+
+## Constraints
+
+Validation rules match the Week 3 fleet consumer's ID length and battery/GPS
+bounds. The shared telemetry.schema.json currently allows longer IDs; do not
+relax the consumer-facing limit without coordinating contract updates. The
+`fleet.vehicle` topic, record key and schemaVersion `1.0` stay unchanged.

@@ -1,11 +1,10 @@
 package com.cebp.telemetry;
 
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 @Service
 class TelemetryIngestion {
-    private static final Pattern VEHICLE_ID = Pattern.compile("veh_[A-Za-z0-9][A-Za-z0-9_-]{2,35}");
     private final VehicleEventSerializer serializer;
     private final KafkaTemplate<String, String> kafka;
 
@@ -24,25 +22,29 @@ class TelemetryIngestion {
 
     CompletableFuture<Void> publish(TelemetryMeasurement measurement)
             throws JsonProcessingException {
-        return publish(measurement, Instant.now(), null);
+        return publishInternal(measurement, null, false);
+    }
+
+    /** Send the exact same JSON (including eventId) twice to test consumer idempotency. */
+    CompletableFuture<Void> publishExactDuplicateEvents(TelemetryMeasurement measurement)
+            throws JsonProcessingException {
+        return publishInternal(measurement, null, true);
     }
 
     CompletableFuture<Void> publishReplay(TelemetryMeasurement measurement, Instant publishedAt)
             throws JsonProcessingException {
-        String seed = "week3-replay:" + measurement.vehicleId() + ":" + measurement.measuredAt() + ":" + publishedAt;
-        return publish(measurement, publishedAt, seed);
+        return publishInternal(measurement, Objects.requireNonNull(publishedAt, "publishedAt"), false);
     }
 
-    private CompletableFuture<Void> publish(TelemetryMeasurement measurement, Instant publishedAt, String replaySeed)
-            throws JsonProcessingException {
-        validateIdentity(measurement.vehicleId(), measurement.measuredAt());
-        if (measurement.batteryPercent() < 0 || measurement.batteryPercent() > 100) {
-            throw new IllegalArgumentException("batteryPercent must be between 0 and 100");
-        }
-        validateCoordinate(measurement.latitude(), 90, "latitude");
-        validateCoordinate(measurement.longitude(), 180, "longitude");
+    private CompletableFuture<Void> publishInternal(TelemetryMeasurement measurement, Instant replayPublishedAt,
+                                                    boolean duplicate) throws JsonProcessingException {
+        TelemetryValidator.validate(measurement);
 
+        Instant publishedAt = replayPublishedAt == null ? Instant.now() : replayPublishedAt;
+        String replaySeed = replayPublishedAt == null ? null
+                : "week3-replay:" + measurement.vehicleId() + ":" + measurement.measuredAt() + ":" + publishedAt;
         String correlationId = "corr_" + id(replaySeed, "measurement");
+
         VehicleEvent battery = new VehicleEvent(
                 "evt_" + id(replaySeed, "battery"), "VehicleBatteryUpdated", "1.0",
                 measurement.measuredAt(), publishedAt, measurement.vehicleId(),
@@ -58,23 +60,21 @@ class TelemetryIngestion {
 
         String batteryJson = serializer.toJson(battery);
         String locationJson = serializer.toJson(location);
+        String key = measurement.vehicleId();
 
+        // For a duplicate test, wait for each acknowledgement before replaying
+        // the same bytes. New events would have new IDs and test the wrong behavior.
+        if (duplicate) {
+            return kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, batteryJson)
+                    .thenCompose(r -> kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, batteryJson))
+                    .thenCompose(r -> kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, locationJson))
+                    .thenCompose(r -> kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, locationJson))
+                    .thenApply(r -> null);
+        }
         return CompletableFuture.allOf(
-                kafka.send(TelemetryApplication.VEHICLE_TOPIC, measurement.vehicleId(), batteryJson),
-                kafka.send(TelemetryApplication.VEHICLE_TOPIC, measurement.vehicleId(), locationJson)
+                kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, batteryJson),
+                kafka.send(TelemetryApplication.VEHICLE_TOPIC, key, locationJson)
         );
-    }
-
-    CompletableFuture<Void> publishFault(String vehicleId, Instant measuredAt, String code, String description)
-            throws JsonProcessingException {
-        validateIdentity(vehicleId, measuredAt);
-        validateText(code, 50, "faultCode");
-        if (description != null) validateText(description, 500, "description");
-        VehicleEvent fault = new VehicleEvent("evt_" + UUID.randomUUID(), "VehicleFaultReported", "1.0",
-                measuredAt, Instant.now(), vehicleId, "corr_" + UUID.randomUUID(), "telemetry-ingestion-service",
-                new VehicleEvent.Fault(code, description));
-        return kafka.send(TelemetryApplication.VEHICLE_TOPIC, vehicleId, serializer.toJson(fault))
-                .thenApply(result -> null);
     }
 
     private static UUID id(String replaySeed, String kind) {
@@ -82,22 +82,14 @@ class TelemetryIngestion {
                 : UUID.nameUUIDFromBytes((replaySeed + ":" + kind).getBytes(StandardCharsets.UTF_8));
     }
 
-    private static void validateIdentity(String vehicleId, Instant measuredAt) {
-        if (vehicleId == null || !VEHICLE_ID.matcher(vehicleId).matches()) {
-            throw new IllegalArgumentException("Invalid telemetry vehicleId");
-        }
-        if (measuredAt == null) throw new IllegalArgumentException("measuredAt is required");
-    }
-
-    private static void validateCoordinate(BigDecimal value, int limit, String name) {
-        if (value == null || value.abs().compareTo(BigDecimal.valueOf(limit)) > 0) {
-            throw new IllegalArgumentException(name + " must be between " + -limit + " and " + limit);
-        }
-    }
-
-    private static void validateText(String value, int limit, String name) {
-        if (value == null || value.isBlank() || value.codePointCount(0, value.length()) > limit) {
-            throw new IllegalArgumentException(name + " must contain 1 to " + limit + " characters");
-        }
+    /** Week 3 fleet integration also supports fault reports on fleet.vehicle. */
+    CompletableFuture<Void> publishFault(String vehicleId, Instant measuredAt, String code, String description)
+            throws JsonProcessingException {
+        TelemetryValidator.validateFault(vehicleId, measuredAt, code, description);
+        VehicleEvent fault = new VehicleEvent("evt_" + UUID.randomUUID(), "VehicleFaultReported", "1.0",
+                measuredAt, Instant.now(), vehicleId, "corr_" + UUID.randomUUID(),
+                "telemetry-ingestion-service", new VehicleEvent.Fault(code, description));
+        return kafka.send(TelemetryApplication.VEHICLE_TOPIC, vehicleId, serializer.toJson(fault))
+                .thenApply(r -> null);
     }
 }
