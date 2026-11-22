@@ -33,10 +33,10 @@ test("real PostgreSQL fleet API, Docker proxy and browser UI work together", asy
   await expect(page.getByRole("rowheader")).toHaveCount(2);
   await expect(
     page.getByRole("region", { name: "Fleet indicators" }).locator("strong"),
-  ).toHaveText(["2", "1", "0", "1"]);
+  ).toHaveText(["2", "2", "0", "0"]);
   await expect(
     page.getByRole("row").filter({ hasText: `${prefix}-LOW` }),
-  ).toContainText("Needs maintenance");
+  ).toContainText("12%");
   await expect(
     page.getByRole("row").filter({ hasText: `${prefix}-BIKE` }),
   ).toContainText("92%");
@@ -53,4 +53,8 @@ test("real PostgreSQL fleet API, Docker proxy and browser UI work together", asy
   const summary = await request.get("/api/v1/fleet/status");
   expect(summary.status()).toBe(200);
   expect((await summary.json()).totalVehicles).toBe(2);
+  const stream = await request.get("/api/v1/fleet/stream");
+  expect(stream.status()).toBe(200);
+  expect(stream.headers()["content-type"]).toContain("text/event-stream");
+  expect(await stream.text()).toMatch(/event:heartbeat\r?\nretry:15000\r?\ndata:\{\}/);
 });

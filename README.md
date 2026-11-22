@@ -44,10 +44,11 @@ Telemetry is opt-in: see the [telemetry demo](telemetry-ingestion-service/README
 The `telemetry` profile uses `kafka:9092`; its simulator stays disabled unless
 `TELEMETRY_SIMULATOR_ENABLED=true` is explicitly supplied.
 
-Rider demo mode remains the default. The backend does not implement nearby or
-rental endpoints required by the optional rider HTTP adapter. The dashboard
-continues to use fixtures. Telemetry consumers, MCP Kafka projection, demand,
-OFFLINE rules and operational proposal execution remain deferred.
+The dashboard reads the vehicle list and fleet totals from the backend.
+Select **Demo** to use fixtures. The SSE endpoint at
+`/api/v1/fleet/stream` sends a heartbeat to verify the transport.
+Rider demo mode remains the default while nearby and rental API work
+continues in Week 3.
 
 Run `node scripts/compose-smoke.mjs` for a fresh isolated stack with no host port
 collisions. It captures results and logs under `build/week2-smoke-*` and removes
