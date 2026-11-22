@@ -1,4 +1,8 @@
-import type { FleetStatus, Vehicle } from "../src/contracts/fleet";
+import type {
+  FleetStatus,
+  Vehicle,
+  MaintenanceRecord,
+} from "../src/contracts/fleet";
 
 export const apiVehicles: Vehicle[] = [
   {
@@ -75,3 +79,16 @@ export const apiStatus: FleetStatus = {
     },
   ],
 };
+
+export const apiMaintenance: MaintenanceRecord[] = [
+  {
+    id: "mnt_101",
+    vehicleId: "veh_103",
+    reason: "FAULT",
+    status: "OPEN",
+    faultCode: "BRAKE_SENSOR",
+    description: "Synthetic brake sensor fault.",
+    openedAt: "2026-11-18T09:30:00Z",
+    resolvedAt: null,
+  },
+];

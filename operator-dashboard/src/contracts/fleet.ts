@@ -7,6 +7,22 @@
 export type VehicleStatus = "AVAILABLE" | "RENTED" | "MAINTENANCE_REQUIRED";
 export type VehicleType = "E_BIKE" | "E_SCOOTER";
 
+export interface VehicleFilters {
+  status?: VehicleStatus;
+  maxBattery?: number;
+}
+
+export interface MaintenanceRecord {
+  id: string;
+  vehicleId: string;
+  reason: "LOW_BATTERY" | "FAULT" | "MANUAL";
+  status: "OPEN" | "IN_PROGRESS" | "RESOLVED";
+  faultCode?: string | null;
+  description?: string | null;
+  openedAt: string;
+  resolvedAt?: string | null;
+}
+
 export interface Vehicle {
   id: string;
   label: string;

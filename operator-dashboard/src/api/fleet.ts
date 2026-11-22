@@ -1,4 +1,9 @@
-import type { FleetStatus, Vehicle } from "../contracts/fleet";
+import type {
+  FleetStatus,
+  MaintenanceRecord,
+  Vehicle,
+  VehicleFilters,
+} from "../contracts/fleet";
 
 export const VEHICLE_LIMIT = 500;
 
@@ -82,8 +87,32 @@ function isFleetStatus(value: unknown): value is FleetStatus {
 }
 
 export interface FleetSource {
-  listVehicles(signal?: AbortSignal): Promise<Vehicle[]>;
+  listVehicles(
+    signal?: AbortSignal,
+    filters?: VehicleFilters,
+  ): Promise<Vehicle[]>;
   getStatus(signal?: AbortSignal): Promise<FleetStatus>;
+  getVehicle(vehicleId: string, signal?: AbortSignal): Promise<Vehicle>;
+  getMaintenance(
+    vehicleId: string,
+    signal?: AbortSignal,
+  ): Promise<MaintenanceRecord[]>;
+}
+
+function isMaintenance(value: unknown): value is MaintenanceRecord {
+  return (
+    isObject(value) &&
+    isText(value.id) &&
+    isText(value.vehicleId) &&
+    isText(value.reason) &&
+    ["LOW_BATTERY", "FAULT", "MANUAL"].includes(value.reason) &&
+    isText(value.status) &&
+    ["OPEN", "IN_PROGRESS", "RESOLVED"].includes(value.status) &&
+    (value.faultCode == null || typeof value.faultCode === "string") &&
+    (value.description == null || typeof value.description === "string") &&
+    isTime(value.openedAt) &&
+    optionalTime(value.resolvedAt)
+  );
 }
 
 /** Same-origin requests work through Vite locally and the team's Nginx in Docker. */
@@ -171,16 +200,54 @@ export function createFleetApi({
     }
   }
   return {
-    listVehicles: (signal) =>
-      get(
-        `/vehicles?limit=${VEHICLE_LIMIT}`,
+    listVehicles: (signal, filters = {}) => {
+      if (
+        (filters.status !== undefined && !statuses.includes(filters.status)) ||
+        (filters.maxBattery !== undefined &&
+          (!isPercent(filters.maxBattery) ||
+            !Number.isInteger(filters.maxBattery)))
+      ) {
+        return Promise.reject(
+          new FleetApiError(
+            "Choose a valid status and a whole-number battery limit from 0 to 100.",
+            "INVALID_FILTER",
+          ),
+        );
+      }
+      const query = new URLSearchParams({ limit: String(VEHICLE_LIMIT) });
+      if (filters.status !== undefined) query.set("status", filters.status);
+      if (filters.maxBattery !== undefined)
+        query.set("maxBattery", String(filters.maxBattery));
+      return get(
+        `/vehicles?${query}`,
         (value): value is Vehicle[] =>
           Array.isArray(value) &&
           value.every(isVehicle) &&
           new Set(value.map((v) => v.id)).size === value.length,
         signal,
-      ),
+      );
+    },
     getStatus: (signal) => get("/fleet/status", isFleetStatus, signal),
+    getVehicle: (vehicleId, signal) =>
+      get(
+        `/vehicles/${encodeURIComponent(vehicleId)}`,
+        (value): value is Vehicle => isVehicle(value) && value.id === vehicleId,
+        signal,
+      ),
+    getMaintenance: (vehicleId, signal) =>
+      get(
+        `/maintenance?${new URLSearchParams({ vehicleId, limit: String(VEHICLE_LIMIT) })}`,
+        (value): value is MaintenanceRecord[] =>
+          Array.isArray(value) &&
+          value.every(
+            (record) =>
+              isMaintenance(record) &&
+              record.vehicleId === vehicleId &&
+              record.status !== "RESOLVED",
+          ) &&
+          new Set(value.map((record) => record.id)).size === value.length,
+        signal,
+      ),
   };
 }
 
