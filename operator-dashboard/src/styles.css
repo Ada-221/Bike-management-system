@@ -51,6 +51,76 @@ h3 {
   font-size: 1rem;
   line-height: 1.5;
 }
+.data-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+  font-size: 1rem;
+}
+.data-toolbar select {
+  appearance: none;
+  font: inherit;
+  padding: 10px 38px 10px 12px;
+  border: 1px solid #aebfa5;
+  border-radius: 5px;
+  color: #22362f;
+  background: #fff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='m3 5 4 4 4-4' fill='none' stroke='%2322362f' stroke-width='1.5'/%3E%3C/svg%3E")
+    right 12px center / 14px no-repeat;
+}
+.data-toolbar select:focus-visible {
+  outline: 3px solid #9b5e24;
+  outline-offset: 3px;
+}
+.action-button {
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 10px 16px;
+  border: 1px solid #aebfa5;
+  border-radius: 5px;
+  background: #e1ebd4;
+  color: #22362f;
+  cursor: pointer;
+}
+.action-button:hover:not(:disabled) {
+  background: #d5e5ad;
+}
+.action-button:disabled {
+  color: #687365;
+  background: #eef1e9;
+}
+.resource-state {
+  padding: 20px;
+  background: #edf1e7;
+  border-radius: 7px;
+  margin: 16px 0;
+  line-height: 1.6;
+  font-size: 1rem;
+}
+.resource-state h3 {
+  margin-bottom: 8px;
+}
+.resource-state p:last-child {
+  margin-bottom: 0;
+}
+.resource-error {
+  background: #fbf1e4;
+  color: #71451c;
+  border: 1px solid #e2caa6;
+}
+.list-note,
+.snapshot-time {
+  font-size: 0.8125rem;
+  color: #526348;
+  line-height: 1.6;
+  padding: 0 24px;
+}
+.snapshot-time {
+  padding: 0;
+  margin-top: 12px;
+}
 .app-shell {
   min-height: 100vh;
   display: flex;
@@ -727,4 +797,48 @@ tbody tr:last-child > * {
   .map-note {
     max-width: calc(100% - 40px);
   }
+}
+
+/* Keep the original layout while making regularly read text legible. */
+.page-heading > div > p:last-child,
+.metric p,
+.map-note p,
+.proposal-panel > p:not(.eyebrow),
+.proposal-example p,
+.future-panel > p:last-child,
+.future-panel li,
+table {
+  font-size: 1rem;
+}
+.topbar,
+nav button,
+.quiet-label,
+.preview-badge,
+.preview-notice,
+.milestone-tag,
+.metric > span,
+.vehicle-type,
+.battery,
+.status,
+.decision-buttons button,
+.map-note strong,
+.proposal-example h3 {
+  font-size: 0.875rem;
+}
+.eyebrow,
+thead,
+.map-footer,
+.page-footer,
+.outline-tag,
+.sidebar-label,
+.map-zone {
+  font-size: 0.8125rem;
+}
+.brand span:not(.brand-mark),
+.nav-caption,
+.version {
+  font-size: 0.75rem;
+}
+.proposal-panel > .fine-print {
+  font-size: 0.8125rem !important;
 }

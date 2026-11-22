@@ -1,16 +1,17 @@
-import type { Vehicle, Zone } from "../contracts/fleet";
+import type { FleetStatus, Vehicle, Zone } from "../contracts/fleet";
+import type { FleetSource } from "../api/fleet";
 
 // Synthetic, fixed snapshots. No backend, telemetry, or MCP connection.
 export const sampleZones = [
   {
-    id: "a0000000-0000-0000-0000-000000000001",
+    id: "zone_001",
     name: "Campus",
     centerLatitude: 48.21,
     centerLongitude: 16.36,
     radiusMeters: 1000,
   },
   {
-    id: "a0000000-0000-0000-0000-000000000002",
+    id: "zone_002",
     name: "Central station",
     centerLatitude: 48.1858,
     centerLongitude: 16.3758,
@@ -20,7 +21,7 @@ export const sampleZones = [
 
 export const sampleVehicles = [
   {
-    id: "b0000000-0000-0000-0000-000000000001",
+    id: "veh_001",
     label: "EB-001",
     type: "E_BIKE",
     status: "AVAILABLE",
@@ -31,7 +32,7 @@ export const sampleVehicles = [
     rentable: true,
   },
   {
-    id: "b0000000-0000-0000-0000-000000000002",
+    id: "veh_002",
     label: "ES-002",
     type: "E_SCOOTER",
     status: "RENTED",
@@ -42,7 +43,7 @@ export const sampleVehicles = [
     rentable: false,
   },
   {
-    id: "b0000000-0000-0000-0000-000000000003",
+    id: "veh_003",
     label: "EB-003",
     type: "E_BIKE",
     status: "MAINTENANCE_REQUIRED",
@@ -53,7 +54,7 @@ export const sampleVehicles = [
     rentable: false,
   },
   {
-    id: "b0000000-0000-0000-0000-000000000004",
+    id: "veh_004",
     label: "ES-004",
     type: "E_SCOOTER",
     status: "AVAILABLE",
@@ -64,3 +65,37 @@ export const sampleVehicles = [
     rentable: true,
   },
 ] satisfies Vehicle[];
+
+export function sampleStatus(): FleetStatus {
+  return {
+    generatedAt: new Date().toISOString(),
+    totalVehicles: sampleVehicles.length,
+    countByStatus: {
+      AVAILABLE: 2,
+      RENTED: 1,
+      MAINTENANCE_REQUIRED: 1,
+    },
+    activeRentals: 1,
+    lowBatteryCount: 1,
+    averageBatteryPercent: 61,
+    zones: sampleZones.map((zone) => ({
+      zoneId: zone.id,
+      zoneName: zone.name,
+      available: sampleVehicles.filter(
+        (v) => v.zoneId === zone.id && v.status === "AVAILABLE",
+      ).length,
+      rented: sampleVehicles.filter(
+        (v) => v.zoneId === zone.id && v.status === "RENTED",
+      ).length,
+      maintenanceRequired: sampleVehicles.filter(
+        (v) => v.zoneId === zone.id && v.status === "MAINTENANCE_REQUIRED",
+      ).length,
+    })),
+  };
+}
+
+// Selected explicitly by the operator; never used as a fallback for API errors.
+export const demoFleet: FleetSource = {
+  listVehicles: async () => structuredClone(sampleVehicles),
+  getStatus: async () => sampleStatus(),
+};

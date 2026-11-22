@@ -1,0 +1,44 @@
+# Frontend-owned test stack. No shared Compose file or developer data is changed.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: fleet
+      POSTGRES_USER: fleet
+      POSTGRES_PASSWORD: frontend-smoke-only
+    volumes:
+      - smoke-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U fleet -d fleet]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  fleet-management-service:
+    build:
+      context: ../fleet-management-service
+    environment:
+      FLEET_DB_URL: jdbc:postgresql://postgres:5432/fleet
+      FLEET_DB_USER: fleet
+      FLEET_DB_PASSWORD: frontend-smoke-only
+      SPRING_PROFILES_ACTIVE: dev
+      # This test covers frontend REST reads, not the separate Kafka pipeline.
+      FLEET_KAFKA_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, "http://localhost:8080/api/v1/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 20s
+  operator-dashboard:
+    build:
+      context: .
+    ports:
+      - "127.0.0.1::80"
+    depends_on:
+      fleet-management-service:
+        condition: service_healthy
+volumes:
+  smoke-postgres:
