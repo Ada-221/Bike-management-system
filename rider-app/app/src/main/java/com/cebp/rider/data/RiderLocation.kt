@@ -13,6 +13,12 @@ import kotlin.math.sqrt
  */
 object RiderLocation {
     val current = GeoPoint(latitude = 48.2100, longitude = 16.3600)
+
+    /** Search radius choices offered to the rider. The contract allows up to 5000 m. */
+    val radiusOptionsMeters = listOf(500, 1000, 2000)
+
+    /** The contract's default radius for `GET /vehicles/nearby`. */
+    const val DEFAULT_RADIUS_METERS = 1000
 }
 
 /** Straight-line (Haversine) distance in meters, as the backend computes `distanceMeters`. */

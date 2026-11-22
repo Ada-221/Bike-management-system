@@ -24,8 +24,8 @@ class HttpRiderRepository(
     private val riderId: String,
 ) : RiderRepository {
 
-    override suspend fun getNearbyVehicles(position: GeoPoint): List<Vehicle> = call {
-        api.listNearbyVehicles(position.latitude, position.longitude)
+    override suspend fun getNearbyVehicles(position: GeoPoint, radiusMeters: Int): List<Vehicle> = call {
+        api.listNearbyVehicles(position.latitude, position.longitude, radiusMeters)
     }
 
     override suspend fun getVehicle(vehicleId: String): Vehicle? = callOrNullIfMissing {

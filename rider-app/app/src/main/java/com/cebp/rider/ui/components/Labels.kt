@@ -37,6 +37,8 @@ val RiderException.messageRes: Int
             ErrorCodes.VEHICLE_NOT_AVAILABLE -> R.string.error_vehicle_not_available
             ErrorCodes.BATTERY_TOO_LOW -> R.string.error_battery_too_low
             ErrorCodes.RIDER_HAS_ACTIVE_RENTAL -> R.string.error_rider_has_active_rental
+            // The app built a request the server could not accept: not something the rider can fix.
+            ErrorCodes.VALIDATION_ERROR, ErrorCodes.MISSING_IDEMPOTENCY_KEY -> R.string.error_invalid_request
             else -> R.string.error_rejected
         }
     }

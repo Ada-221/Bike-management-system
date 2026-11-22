@@ -56,6 +56,7 @@ fun RiderApp(repository: RiderRepository) {
                 repository = repository,
                 onBack = navController::popBackStack,
                 onRentalStarted = { navController.replaceAboveList(Routes.activeRental(it)) },
+                onOpenActiveRental = { navController.replaceAboveList(Routes.activeRental(it)) },
             )
         }
 

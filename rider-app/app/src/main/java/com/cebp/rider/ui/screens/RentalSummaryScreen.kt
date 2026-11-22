@@ -2,8 +2,11 @@ package com.cebp.rider.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,12 +29,15 @@ fun RentalSummaryRoute(
     repository: RiderRepository,
     onDone: () -> Unit,
 ) {
-    val load = rememberLoad(rentalId) { repository.getRentalWithVehicleLabel(rentalId) }
+    val load = rememberLoad(rentalId) { repository.getRentalWithVehicle(rentalId) }
 
     RiderScaffold(title = stringResource(R.string.rental_summary_title)) { padding ->
         LoadContent(load, padding) { loaded ->
             Column(
-                modifier = Modifier.padding(padding).padding(16.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (loaded?.rental?.endedAt == null) {

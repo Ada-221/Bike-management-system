@@ -4,14 +4,31 @@
     <string name="navigate_back">Back</string>
     <string name="action_retry">Try again</string>
 
+    <string name="refresh_failed">Couldn\'t update. %1$s</string>
+
     <string name="vehicle_list_title">Available vehicles</string>
-    <string name="vehicle_list_empty">No vehicles available nearby right now.</string>
-    <string name="vehicle_list_row">%1$s · %2$d m away</string>
+    <string name="vehicle_list_empty">No matching vehicles within %1$s. Try a larger radius or another vehicle type.</string>
+    <string name="vehicle_list_row">%1$s · %2$s away</string>
+    <string name="filter_all">All</string>
+    <string name="filter_e_bikes">E-bikes</string>
+    <string name="filter_e_scooters">E-scooters</string>
+    <string name="filter_within">Within:</string>
+    <string name="distance_meters">%1$d m</string>
+    <string name="distance_km_whole">%1$d km</string>
+    <string name="distance_km">%1$.1f km</string>
+
     <string name="vehicle_details_title">Vehicle details</string>
     <string name="vehicle_not_found">This vehicle could not be found.</string>
     <string name="vehicle_battery">Battery: %1$d%%</string>
     <string name="vehicle_status">Status: %1$s</string>
-    <string name="vehicle_not_rentable">This vehicle can\'t be rented right now. Vehicles need to be available with at least 20% battery.</string>
+    <string name="battery_measured_just_now">Battery measured just now</string>
+    <string name="battery_measured_ago">Battery measured %1$s ago</string>
+    <string name="battery_measured_stale">Battery measured %1$s ago, so it may be out of date</string>
+    <string name="reason_rented">Someone else is riding this vehicle right now.</string>
+    <string name="reason_low_battery">The battery is below 20%, so this vehicle can\'t be rented until it\'s charged.</string>
+    <string name="reason_maintenance">This vehicle needs maintenance and can\'t be rented right now.</string>
+    <string name="reason_unavailable">This vehicle can\'t be rented right now.</string>
+    <string name="go_to_my_ride">Go to my ride</string>
 
     <string name="vehicle_type_e_bike">E-bike</string>
     <string name="vehicle_type_e_scooter">E-scooter</string>
@@ -28,6 +45,11 @@
     <string name="rental_ended_at">Ended at %1$s</string>
     <string name="rental_duration">Duration: %1$s</string>
     <string name="rental_battery_used">Battery: %1$d%% → %2$d%%</string>
+    <string name="rental_ride_time">Ride time: %1$s</string>
+    <string name="rental_fault_title">This vehicle reported a problem</string>
+    <string name="rental_fault_body">Please finish your ride when it\'s safe to stop, and return the vehicle.</string>
+    <string name="rental_already_ended">This ride has already ended.</string>
+    <string name="rental_see_summary">See ride summary</string>
     <string name="rental_end">Return vehicle</string>
     <string name="rental_summary_title">Ride summary</string>
     <string name="rental_not_found">This ride could not be found.</string>
@@ -40,6 +62,10 @@
     <plurals name="duration_minutes">
         <item quantity="one">%1$d minute</item>
         <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <plurals name="duration_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
     </plurals>
     <plurals name="duration_seconds">
         <item quantity="one">%1$d second</item>
@@ -55,5 +81,6 @@
     <string name="error_vehicle_not_available">This vehicle was just taken or needs maintenance. Pick another one.</string>
     <string name="error_battery_too_low">This vehicle\'s battery is too low to rent. Pick another one.</string>
     <string name="error_rider_has_active_rental">You already have a ride in progress. Return that vehicle first.</string>
+    <string name="error_invalid_request">The server couldn\'t accept this request. Please try again, or update the app.</string>
     <string name="error_rejected">The request was refused. Please try again.</string>
 </resources>
