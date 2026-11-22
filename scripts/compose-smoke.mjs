@@ -37,6 +37,8 @@ try {
     '-e', 'SPRING_MAIN_WEB_APPLICATION_TYPE=none'];
   await compose([...simulator, 'telemetry']);
   await exercise('rent');
+  await compose([...simulator, '-e', 'TELEMETRY_SIMULATOR_SCENARIO=replay',
+    '-e', 'TELEMETRY_SIMULATOR_REPLAY_AT=' + new Date().toISOString(), 'telemetry']);
   await compose([...simulator, '-e', 'TELEMETRY_SIMULATOR_SCENARIO=fault', 'telemetry']);
   await exercise('fault-return');
   await exercise('verify');
@@ -56,7 +58,7 @@ try {
   await compose(['run', '--rm', '--no-deps', 'ai-mcp-service', 'npm', 'run', 'rebuild']);
   await compose(['up', '-d', '--no-deps', '--wait', '--wait-timeout', '90', 'ai-mcp-service']);
   await exercise('verify');
-  writeFileSync(path.join(output, 'result.txt'), 'PASS: real fleet REST and telemetry, mid-trip fault and return, dashboard proxy, outbox recovery, backend-independent MCP, restart and rebuild, advisory approval preserved.\n');
+  writeFileSync(path.join(output, 'result.txt'), 'PASS: real fleet REST and telemetry, duplicate and out-of-order replay, mid-trip fault and return, dashboard proxy, outbox recovery, backend-independent MCP, restart and rebuild, advisory approval preserved.\n');
   console.log(`PASS ${project}; evidence: ${output}`);
 } catch (error) {
   writeFileSync(path.join(output, 'result.txt'), `FAIL: ${error.stack}\n`);

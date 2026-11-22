@@ -100,6 +100,11 @@ if (mode === "seed") {
   } else if (mode === "fault-return") {
     await waitFor(async () => (await vehicle(workingId, dashboard)).status === "MAINTENANCE_REQUIRED"
       && find(await low(), workingId)?.operationalStatus === "MAINTENANCE");
+    const afterReplay = await vehicle(workingId, dashboard);
+    assert.equal(afterReplay.batteryPercent, 65);
+    assert.equal(afterReplay.latitude, 48.2105);
+    assert.equal(afterReplay.longitude, 16.3605);
+    assert.equal(find(await low(), workingId)?.batteryPercent, 65);
     assert.equal((await request(dashboard, "/fleet/status")).activeRentals, 1);
     assert.deepEqual(await request(fleet, "/vehicles/nearby?lat=48.21&lon=16.36"), []);
     const recovered = await request(fleet, `/rentals?riderId=${riderId}&status=ACTIVE`);

@@ -17,6 +17,13 @@ fault, add `-e TELEMETRY_SIMULATOR_SCENARIO=fault` before `telemetry` in the
 same command. The fleet API reports `MAINTENANCE_REQUIRED` even during a
 trip. The rider can still return the active rental.
 
+Set `TELEMETRY_SIMULATOR_SCENARIO=replay` to publish newer, duplicate, and late
+battery and location measurements. For the same vehicle and
+`TELEMETRY_SIMULATOR_REPLAY_AT` (UTC ISO timestamp), the same records are emitted
+in the same order. For a live check, choose a time newer than the registration
+and the vehicle's latest readings. The final battery should be 65% and the
+location should be `48.2105, 16.3605`. The default date is fixed for fixture replay.
+
 Use `node scripts/compose-smoke.mjs` to check real telemetry against fleet REST
 and MCP on a fresh broker. See the [telemetry contract](../telemetry-contract.md)
 for event shapes and [fleet contract](../contracts/fleet/v1/README.md) for routing.
