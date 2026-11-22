@@ -58,20 +58,24 @@ class HttpRiderRepositoryTest {
         runCatching { block() }.exceptionOrNull() as RiderException
 
     @Test
-    fun `nearby sends the position and reads NearbyVehicle`() = runTest {
+    fun `nearby sends the position and radius and reads NearbyVehicle`() = runTest {
         respond(200, "[$NEARBY_VEHICLE]")
 
-        val vehicles = repository.getNearbyVehicles(GeoPoint(48.21, 16.36))
+        val vehicles = repository.getNearbyVehicles(GeoPoint(48.21, 16.36), 2000)
 
         val request = server.takeRequest()
         assertEquals("GET", request.method)
         assertEquals("/api/v1/vehicles/nearby", request.requestUrl!!.encodedPath)
         assertEquals("48.21", request.requestUrl!!.queryParameter("lat"))
         assertEquals("16.36", request.requestUrl!!.queryParameter("lon"))
+        assertEquals("2000", request.requestUrl!!.queryParameter("radiusMeters"))
         assertNotNull(request.getHeader("X-Correlation-Id"))
 
         val vehicle = vehicles.single()
-        assertEquals("b0000000-0000-0000-0000-000000000001", vehicle.id)
+        assertEquals("veh_001", vehicle.id)
+        assertEquals("zone_001", vehicle.zoneId)
+        assertEquals(Instant.parse("2026-11-09T08:29:50.123456Z"), vehicle.lastBatteryAt)
+        assertEquals(Instant.parse("2026-11-09T08:29:40Z"), vehicle.lastLocationAt)
         assertEquals("EB-001", vehicle.label)
         assertEquals(VehicleType.E_BIKE, vehicle.type)
         assertEquals(VehicleStatus.AVAILABLE, vehicle.status)
@@ -187,31 +191,32 @@ class HttpRiderRepositoryTest {
     fun `a server error becomes Unexpected`() = runTest {
         respond(500, """{"code":"INTERNAL_ERROR","message":"boom","timestamp":"2026-11-09T08:30:00Z"}""")
 
-        assertTrue(failure { repository.getNearbyVehicles(GeoPoint(48.21, 16.36)) } is RiderException.Unexpected)
+        assertTrue(failure { repository.getNearbyVehicles(GeoPoint(48.21, 16.36), 1000) } is RiderException.Unexpected)
     }
 
     @Test
     fun `a response the app cannot read becomes Unexpected`() = runTest {
         respond(200, """{"not":"a list"}""")
 
-        assertTrue(failure { repository.getNearbyVehicles(GeoPoint(48.21, 16.36)) } is RiderException.Unexpected)
+        assertTrue(failure { repository.getNearbyVehicles(GeoPoint(48.21, 16.36), 1000) } is RiderException.Unexpected)
     }
 
     @Test
     fun `a broken connection becomes Unreachable`() = runTest {
         server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
 
-        assertTrue(failure { repository.getNearbyVehicles(GeoPoint(48.21, 16.36)) } is RiderException.Unreachable)
+        assertTrue(failure { repository.getNearbyVehicles(GeoPoint(48.21, 16.36), 1000) } is RiderException.Unreachable)
     }
 
     private companion object {
         const val RIDER_ID = "rider-demo-1"
 
-        const val VEHICLE = """{"id":"b0000000-0000-0000-0000-000000000001","label":"EB-001","type":"E_BIKE",
+        // The Week 3 contract example, as the backend sends it (microsecond timestamps).
+        const val VEHICLE = """{"id":"veh_001","label":"EB-001","type":"E_BIKE",
             "status":"AVAILABLE","batteryPercent":92,"latitude":48.2102,"longitude":16.3598,
-            "zoneId":"a0000000-0000-0000-0000-000000000001","rentable":true,
-            "lastTelemetryAt":"2026-11-09T08:29:50Z","createdAt":"2026-11-01T10:00:00Z",
-            "updatedAt":"2026-11-09T08:29:50Z"}"""
+            "zoneId":"zone_001","rentable":true,"lastBatteryAt":"2026-11-09T08:29:50.123456Z",
+            "lastLocationAt":"2026-11-09T08:29:40Z","lastTelemetryAt":"2026-11-09T08:29:50Z",
+            "createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-09T08:29:50Z"}"""
 
         val NEARBY_VEHICLE = VEHICLE.trimEnd('}') + ""","distanceMeters":28}"""
 

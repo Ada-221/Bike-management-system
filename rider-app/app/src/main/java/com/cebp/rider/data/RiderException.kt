@@ -15,6 +15,8 @@ sealed class RiderException(message: String?, cause: Throwable? = null) : Except
 
 /** `Error.code` values from api/fleet-api.yaml that the rider app reacts to. */
 object ErrorCodes {
+    const val VALIDATION_ERROR = "VALIDATION_ERROR"
+    const val MISSING_IDEMPOTENCY_KEY = "MISSING_IDEMPOTENCY_KEY"
     const val NOT_FOUND = "NOT_FOUND"
     const val VEHICLE_NOT_AVAILABLE = "VEHICLE_NOT_AVAILABLE"
     const val BATTERY_TOO_LOW = "BATTERY_TOO_LOW"

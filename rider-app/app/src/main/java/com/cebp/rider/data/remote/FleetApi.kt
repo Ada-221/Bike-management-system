@@ -17,6 +17,7 @@ interface FleetApi {
     suspend fun listNearbyVehicles(
         @Query("lat") latitude: Double,
         @Query("lon") longitude: Double,
+        @Query("radiusMeters") radiusMeters: Int,
     ): List<Vehicle>
 
     @GET("vehicles/{vehicleId}")

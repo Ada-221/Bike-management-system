@@ -10,8 +10,11 @@ import com.cebp.rider.model.Vehicle
  * Every function throws [RiderException] when the request fails.
  */
 interface RiderRepository {
-    /** Rentable vehicles near [position], closest first (`GET /vehicles/nearby`). */
-    suspend fun getNearbyVehicles(position: GeoPoint): List<Vehicle>
+    /**
+     * Rentable vehicles within [radiusMeters] of [position], closest first
+     * (`GET /vehicles/nearby`).
+     */
+    suspend fun getNearbyVehicles(position: GeoPoint, radiusMeters: Int): List<Vehicle>
 
     /** The vehicle, or null if it does not exist. */
     suspend fun getVehicle(vehicleId: String): Vehicle?

@@ -3,9 +3,11 @@ package com.cebp.rider.model
 import java.time.Instant
 import kotlinx.serialization.Serializable
 
-// Field names and enum values follow api/fleet-api.yaml (v0.1). IDs are opaque strings: the team
-// agreed on prefixed IDs such as veh_001, while the v0.1 contract still says UUID, so the app never
-// relies on their format.
+// Field names and enum values follow api/fleet-api.yaml. IDs are prefixed strings such as veh_001
+// and rnt_001; the app treats them as opaque and never relies on their format.
+
+/** Fleet rule: a vehicle needs at least this much battery to be rented. */
+const val MIN_RENTABLE_BATTERY_PERCENT = 20
 
 @Serializable
 enum class VehicleType { E_BIKE, E_SCOOTER }
@@ -30,8 +32,14 @@ data class Vehicle(
     val latitude: Double,
     val longitude: Double,
     val zoneId: String? = null,
-    /** Set by the backend: AVAILABLE with at least 20 percent battery. */
+    /** Set by the backend: AVAILABLE with at least [MIN_RENTABLE_BATTERY_PERCENT] battery. */
     val rentable: Boolean,
+    /** When [batteryPercent] was measured. Null if the vehicle never reported it. */
+    @Serializable(with = InstantSerializer::class)
+    val lastBatteryAt: Instant? = null,
+    /** When [latitude] and [longitude] were measured. */
+    @Serializable(with = InstantSerializer::class)
+    val lastLocationAt: Instant? = null,
     /** Only present in `GET /vehicles/nearby` results. */
     val distanceMeters: Int? = null,
 )
