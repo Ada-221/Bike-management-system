@@ -1,3 +1,4 @@
+
 package com.cebp.telemetry;
 
 import java.time.Instant;
@@ -44,5 +45,33 @@ class TelemetryScenariosTest {
     void rejectsUnknownScenario() {
         assertThrows(IllegalArgumentException.class,
                 () -> TelemetryScenarios.forName("not-a-scenario", "veh_001", START));
+    }
+
+    // Week 4: Low-battery scenario tests
+
+    @Test
+    void lowBatteryScenarioProducesDecreasingBatteryLevels() {
+        var readings = TelemetryScenarios.forName("low-battery", "veh_001", START);
+
+        assertEquals(4, readings.size());
+
+        assertEquals(25, readings.get(0).batteryPercent());
+        assertEquals(15, readings.get(1).batteryPercent());
+        assertEquals(10, readings.get(2).batteryPercent());
+        assertEquals(5, readings.get(3).batteryPercent());
+
+        readings.forEach(TelemetryValidator::validate);
+    }
+
+    @Test
+    void lowBatteryScenarioHasIncreasingTimestamps() {
+        var readings = TelemetryScenarios.forName("low-battery", "veh_001", START);
+
+        for (int i = 1; i < readings.size(); i++) {
+            assertTrue(readings.get(i).measuredAt()
+                    .isAfter(readings.get(i - 1).measuredAt()));
+        }
+
+        assertEquals(START, readings.get(3).measuredAt());
     }
 }

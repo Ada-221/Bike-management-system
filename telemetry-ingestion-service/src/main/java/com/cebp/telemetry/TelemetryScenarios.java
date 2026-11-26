@@ -1,3 +1,4 @@
+
 package com.cebp.telemetry;
 
 import java.math.BigDecimal;
@@ -15,15 +16,25 @@ final class TelemetryScenarios {
             case "baseline", "normal" -> List.of(
                     reading(vehicleId, start.minusSeconds(5), 75, "48.2102", "16.3598"),
                     reading(vehicleId, start, 74, "48.2104", "16.3600"));
+
             case "out-of-order" -> List.of(
                     reading(vehicleId, start.minusSeconds(10), 75, "48.2102", "16.3598"),
                     reading(vehicleId, start, 73, "48.2106", "16.3602"),
                     reading(vehicleId, start.minusSeconds(5), 74, "48.2104", "16.3600"));
+
             case "duplicate-event" -> List.of(
                     reading(vehicleId, start, 75, "48.2102", "16.3598"));
+
+            case "low-battery" -> List.of(
+                    reading(vehicleId, start.minusSeconds(15), 25, "48.2102", "16.3598"),
+                    reading(vehicleId, start.minusSeconds(10), 15, "48.2104", "16.3600"),
+                    reading(vehicleId, start.minusSeconds(5), 10, "48.2106", "16.3602"),
+                    reading(vehicleId, start, 5, "48.2108", "16.3604"));
+
             case "replay" -> replay(vehicleId, start);
+
             default -> throw new IllegalArgumentException("Unknown scenario: " + name
-                    + ". Use baseline, normal, out-of-order, duplicate-event, replay, or fault");
+                    + ". Use baseline, normal, out-of-order, duplicate-event, replay, fault, low-battery, or continuous");
         };
     }
 
